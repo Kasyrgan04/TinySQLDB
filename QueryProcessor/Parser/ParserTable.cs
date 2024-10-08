@@ -1,15 +1,12 @@
-﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel.DataAnnotations;
-using System.Data.Common;
+﻿using System.Data.Common;
 using System.Text.RegularExpressions;
-using Entities;
+using EntitiesDataType = Entities.DataType;
 
 namespace QueryProcessor.Parser
 {
     internal class ParserTable
     {
-        internal string GetTableName(string sentence) // Obtiene el nombre de la tabla con la referencia del paréntesis
+        internal string GetTableName(string sentence)
         {
             int tableNameEnd = sentence.IndexOf('(');
             return sentence.Substring(0, tableNameEnd).Trim();
@@ -17,7 +14,7 @@ namespace QueryProcessor.Parser
 
         internal List<Column> GetColumns(string columnsInfo)
         {
-            var columns = new List<Column>(); // Creamos una lista de columnas
+            var columns = new List<Column>();
 
             columnsInfo = columnsInfo.Trim().Substring(1, columnsInfo.Length - 2);
             string[] rawColumns = columnsInfo.Split(',');
@@ -27,7 +24,7 @@ namespace QueryProcessor.Parser
             foreach (string column in rawColumns)
             {
                 string trimmedColumn = column.Trim();
-                Match match = Regex.Match(trimmedColumn, @"^(\S+)\s+(.+)$"); // Formato para la división de nombre y tipo
+                Match match = Regex.Match(trimmedColumn, @"^(\S+)\s+(.+)$");
 
                 if (match.Success)
                 {
@@ -42,7 +39,7 @@ namespace QueryProcessor.Parser
                 }
             }
 
-            foreach (string[] column in rawColumnsMatrix) // ("ID", "INTEGER")
+            foreach (string[] column in rawColumnsMatrix)
             {
                 var newColumn = new Column
                 {
@@ -53,7 +50,7 @@ namespace QueryProcessor.Parser
 
                 if (rawColumnDataType.StartsWith("INTEGER"))
                 {
-                    newColumn.DataType = DataType.INTEGER;
+                    newColumn.DataType = EntitiesDataType.INTEGER; // Uso del alias
                 }
                 else if (rawColumnDataType.StartsWith("VARCHAR"))
                 {
@@ -61,7 +58,7 @@ namespace QueryProcessor.Parser
 
                     if (int.TryParse(varcharSize, out int maxSizeNumber))
                     {
-                        newColumn.DataType = DataType.VARCHAR;
+                        newColumn.DataType = EntitiesDataType.VARCHAR; // Uso del alias
                         newColumn.MaxSize = maxSizeNumber;
                     }
                     else
@@ -71,11 +68,11 @@ namespace QueryProcessor.Parser
                 }
                 else if (rawColumnDataType.StartsWith("DOUBLE"))
                 {
-                    newColumn.DataType = DataType.DOUBLE;
+                    newColumn.DataType = EntitiesDataType.DOUBLE; // Uso del alias
                 }
                 else if (rawColumnDataType.StartsWith("DATETIME"))
                 {
-                    newColumn.DataType = DataType.DATETIME;
+                    newColumn.DataType = EntitiesDataType.DATETIME; // Uso del alias
                 }
 
                 columns.Add(newColumn);
