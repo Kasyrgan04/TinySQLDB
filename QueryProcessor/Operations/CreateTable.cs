@@ -1,25 +1,14 @@
 ﻿using Entities;
 using StoreDataManager;
+using System.Data.Common;
 
 namespace QueryProcessor.Operations
 {
     internal class CreateTable
     {
-        private readonly string _tableName;
-        private readonly string[] _columnsDefinition;
-
-        // Constructor que acepta el nombre de la tabla y las definiciones de columnas
-        public CreateTable(string tableName, string[] columnsDefinition)
+        internal OperationStatus Execute(string TableName, List<Column> TableColumns)
         {
-            _tableName = tableName;
-            _columnsDefinition = columnsDefinition;
-        }
-
-        // Método de ejecución que crea la tabla
-        public OperationStatus Execute()
-        {
-            return Store.GetInstance().CreateTable(_tableName, _columnsDefinition);
+            return Store.GetInstance().CreateTable(TableName, TableColumns);
         }
     }
 }
-
