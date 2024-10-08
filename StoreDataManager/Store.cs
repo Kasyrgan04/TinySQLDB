@@ -40,45 +40,55 @@ namespace StoreDataManager
             Directory.CreateDirectory(SystemCatalogPath);
         }
 
-        public OperationStatus CreateTable()
+        public OperationStatus CreateTable(string tableName, string[] columnsDefinition)
         {
-            // Creates a default DB called TESTDB
-            Directory.CreateDirectory($@"{DataPath}\TESTDB");
+            var tablePath = $@"{DataPath}\TESTDB\{tableName}.Table";
 
-            // Creates a default Table called ESTUDIANTES
-            var tablePath = $@"{DataPath}\TESTDB\ESTUDIANTES.Table";
-
-            using (FileStream stream = File.Open(tablePath, FileMode.OpenOrCreate))
-            using (BinaryWriter writer = new (stream))
+            using (FileStream stream = File.Open(tablePath, FileMode.Create))
+            using (BinaryWriter writer = new BinaryWriter(stream))
             {
-                // Create an object with a hardcoded.
-                // First field is an int, second field is a string of size 30,
-                // third is a string of 50
-                int id = 1;
-                string nombre = "Isaac".PadRight(30); // Pad to make the size of the string fixed
-                string apellido = "Ramirez".PadRight(50);
-
-                writer.Write(id);
-                writer.Write(nombre);
-                writer.Write(apellido);
+                // Escribir las definiciones de las columnas en el archivo de la tabla
+                foreach (var column in columnsDefinition)
+                {
+                    writer.Write(column);
+                }
             }
             return OperationStatus.Success;
         }
 
-        public OperationStatus Select()
+
+        public OperationStatus Select(string tableName, List<string> columns)
         {
-            // Creates a default Table called ESTUDIANTES
-            var tablePath = $@"{DataPath}\TESTDB\ESTUDIANTES.Table";
+            var tablePath = $@"{DataPath}\TESTDB\{tableName}.Table";
             using (FileStream stream = File.Open(tablePath, FileMode.OpenOrCreate))
-            using (BinaryReader reader = new (stream))
+            using (BinaryReader reader = new BinaryReader(stream))
             {
-                // Print the values as a I know exactly the types, but this needs to be done right
-                Console.WriteLine(reader.ReadInt32());
-                Console.WriteLine(reader.ReadString());
-                Console.WriteLine(reader.ReadString());
+                while (stream.Position < stream.Length)
+                {
+                    // Suponiendo que siempre se lee el mismo número de columnas
+                    int id = reader.ReadInt32();
+                    string nombre = reader.ReadString();
+                    string apellido = reader.ReadString();
+
+                    // Aquí puedes decidir qué columnas imprimir según los nombres en `columns`
+                    if (columns.Contains("id"))
+                    {
+                        Console.WriteLine(id);
+                    }
+                    if (columns.Contains("nombre"))
+                    {
+                        Console.WriteLine(nombre);
+                    }
+                    if (columns.Contains("apellido"))
+                    {
+                        Console.WriteLine(apellido);
+                    }
+                }
                 return OperationStatus.Success;
             }
         }
+
+
 
         public OperationStatus Insert(string tableName, string[] values)
         {
@@ -94,6 +104,7 @@ namespace StoreDataManager
             }
             return OperationStatus.Success;
         }
+
 
         public OperationStatus Update(string tableName, int id, string[] newValues)
         {
