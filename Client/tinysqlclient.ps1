@@ -73,6 +73,24 @@ function Send-SQLCommand {
     $client.Close()
 }
 
-# Ejemplo de comandos SQL (descomentar para usar)
-# Send-SQLCommand -command "CREATE TABLE ESTUDIANTE"
-# Send-SQLCommand -command "SELECT * FROM ESTUDIANTE"
+# 1. Crear una tabla
+Send-SQLCommand -command "CREATE TABLE ESTUDIANTES"
+
+# 2. Insertar registros en la tabla
+Send-SQLCommand -command "INSERT INTO ESTUDIANTES VALUES (1, 'Isaac', 'Ramirez')"
+Send-SQLCommand -command "INSERT INTO ESTUDIANTES VALUES (2, 'Maria', 'Gonzalez')"
+
+# 3. Seleccionar registros de la tabla
+Send-SQLCommand -command "SELECT * FROM ESTUDIANTES"
+
+# 4. Actualizar un registro
+Send-SQLCommand -command "UPDATE ESTUDIANTES SET (1, 'Isaac', 'Lopez')"
+
+# 5. Seleccionar registros de nuevo para verificar la actualización
+Send-SQLCommand -command "SELECT * FROM ESTUDIANTES"
+
+# 6. Eliminar un registro
+Send-SQLCommand -command "DELETE FROM ESTUDIANTES WHERE id = 2"
+
+# 7. Seleccionar registros de nuevo para verificar la eliminación
+Send-SQLCommand -command "SELECT * FROM ESTUDIANTES"

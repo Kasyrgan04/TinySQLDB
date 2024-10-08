@@ -11,7 +11,7 @@ namespace ApiInterface
 {
     public class Server
     {
-        private static IPEndPoint serverEndPoint = new(IPAddress.Loopback, 11000);
+        private static IPEndPoint serverEndPoint = new(IPAddress.Loopback, 7100);
         private static int supportedParallelConnections = 1;
 
         public static async Task Start()

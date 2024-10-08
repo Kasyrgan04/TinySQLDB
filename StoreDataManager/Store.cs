@@ -79,5 +79,93 @@ namespace StoreDataManager
                 return OperationStatus.Success;
             }
         }
+
+        public OperationStatus Insert(string tableName, string[] values)
+        {
+            var tablePath = $@"{DataPath}\TESTDB\{tableName}.Table";
+
+            using (FileStream stream = new FileStream(tablePath, FileMode.Append))
+            using (BinaryWriter writer = new BinaryWriter(stream))
+            {
+                // Aquí asumo que tienes tres campos, ajusta según tus necesidades
+                writer.Write(int.Parse(values[0])); // Asume que el primer valor es un int
+                writer.Write(values[1].PadRight(30)); // Asume que el segundo valor es un string de tamaño 30
+                writer.Write(values[2].PadRight(50)); // Asume que el tercer valor es un string de tamaño 50
+            }
+            return OperationStatus.Success;
+        }
+
+        public OperationStatus Update(string tableName, int id, string[] newValues)
+        {
+            var tablePath = $@"{DataPath}\TESTDB\{tableName}.Table";
+            var tempPath = $@"{DataPath}\TESTDB\Temp.Table";
+
+            using (FileStream readStream = new FileStream(tablePath, FileMode.Open))
+            using (BinaryReader reader = new BinaryReader(readStream))
+            using (FileStream writeStream = new FileStream(tempPath, FileMode.Create))
+            using (BinaryWriter writer = new BinaryWriter(writeStream))
+            {
+                while (readStream.Position < readStream.Length)
+                {
+                    int recordId = reader.ReadInt32();
+                    string nombre = reader.ReadString();
+                    string apellido = reader.ReadString();
+
+                    // Si encontramos el registro con el ID correspondiente, lo actualizamos
+                    if (recordId == id)
+                    {
+                        writer.Write(id); // Mantener el ID
+                        writer.Write(newValues[0].PadRight(30)); // Actualizar nombre
+                        writer.Write(newValues[1].PadRight(50)); // Actualizar apellido
+                    }
+                    else
+                    {
+                        // Escribir el registro sin cambios
+                        writer.Write(recordId);
+                        writer.Write(nombre);
+                        writer.Write(apellido);
+                    }
+                }
+            }
+
+            // Reemplazar el archivo original con el temporal
+            File.Delete(tablePath);
+            File.Move(tempPath, tablePath);
+            return OperationStatus.Success;
+        }
+
+        public OperationStatus Delete(string tableName, int id)
+        {
+            var tablePath = $@"{DataPath}\TESTDB\{tableName}.Table";
+            var tempPath = $@"{DataPath}\TESTDB\Temp.Table";
+
+            using (FileStream readStream = new FileStream(tablePath, FileMode.Open))
+            using (BinaryReader reader = new BinaryReader(readStream))
+            using (FileStream writeStream = new FileStream(tempPath, FileMode.Create))
+            using (BinaryWriter writer = new BinaryWriter(writeStream))
+            {
+                while (readStream.Position < readStream.Length)
+                {
+                    int recordId = reader.ReadInt32();
+                    string nombre = reader.ReadString();
+                    string apellido = reader.ReadString();
+
+                    // Solo escribimos el registro si no es el que queremos eliminar
+                    if (recordId != id)
+                    {
+                        writer.Write(recordId);
+                        writer.Write(nombre);
+                        writer.Write(apellido);
+                    }
+                }
+            }
+
+            // Reemplazar el archivo original con el temporal
+            File.Delete(tablePath);
+            File.Move(tempPath, tablePath);
+            return OperationStatus.Success;
+        }
+
+
     }
 }

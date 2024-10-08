@@ -1,23 +1,22 @@
 ﻿using Entities;
 using StoreDataManager;
-using System.IO;
 
 namespace QueryProcessor.Operations
 {
-    internal class Insert
+    internal class Delete
     {
         private readonly string _tableName;
-        private readonly string[] _values;
+        private readonly int _id;
 
-        public Insert(string tableName, string[] values)
+        public Delete(string tableName, int id)
         {
             _tableName = tableName;
-            _values = values;
+            _id = id;
         }
 
         public OperationStatus Execute()
         {
-            return Store.GetInstance().Insert(_tableName, _values);
+            return Store.GetInstance().Delete(_tableName, _id);
         }
     }
 }
