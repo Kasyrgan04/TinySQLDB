@@ -11,15 +11,22 @@ namespace ApiInterface
 {
     public class Server
     {
-        private static IPEndPoint serverEndPoint = new(IPAddress.Loopback, 7100);
+        private static IPEndPoint serverEndPoint = new(IPAddress.Loopback, 11000);
         private static int supportedParallelConnections = 1;
 
         public static async Task Start()
         {
+
+
             using Socket listener = new(serverEndPoint.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
             listener.Bind(serverEndPoint);
             listener.Listen(supportedParallelConnections);
             Console.WriteLine($"Server ready at {serverEndPoint.ToString()}");
+
+            var indexGenerator = new IndexGenerator();
+            indexGenerator.LoadIndexesAndGenerateTrees();
+            Console.WriteLine("Índices cargados y árboles generados en memoria.");
+
 
             while (true)
             {
@@ -42,6 +49,7 @@ namespace ApiInterface
                 }
             }
         }
+
 
         private static string GetMessage(Socket handler)
         {
@@ -68,7 +76,14 @@ namespace ApiInterface
             using (NetworkStream stream = new NetworkStream(handler))
             using (StreamWriter writer = new StreamWriter(stream))
             {
-                writer.WriteLine(JsonSerializer.Serialize(response));
+                var options = new JsonSerializerOptions
+                {
+                    WriteIndented = false,
+                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+                };
+
+                string jsonResponse = JsonSerializer.Serialize(response, options);
+                writer.WriteLine(jsonResponse);
             }
         }
 
@@ -77,6 +92,6 @@ namespace ApiInterface
             throw new NotImplementedException();
         }
 
-        
+
     }
 }
