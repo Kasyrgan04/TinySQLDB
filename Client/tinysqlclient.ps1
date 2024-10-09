@@ -1,6 +1,7 @@
 param (
     [Parameter(Mandatory = $true)]
     [string]$IP,
+    
     [Parameter(Mandatory = $true)]
     [int]$Port
 )
@@ -11,15 +12,17 @@ function Send-Message {
     param (
         [Parameter(Mandatory=$true)]
         [pscustomobject]$message,
+        
         [Parameter(Mandatory=$true)]
         [System.Net.Sockets.Socket]$client
     )
 
     $stream = New-Object System.Net.Sockets.NetworkStream($client)
     $writer = New-Object System.IO.StreamWriter($stream)
+
     try {
         $writer.WriteLine($message)
-        $writer.Flush()
+        $writer.Flush()  # Asegúrate de que el mensaje se envíe
     }
     finally {
         $writer.Close()
@@ -33,11 +36,14 @@ function Receive-Message {
     )
     $stream = New-Object System.Net.Sockets.NetworkStream($client)
     $reader = New-Object System.IO.StreamReader($stream)
+
     try {
         $line = $reader.ReadLine()
-        if ($null -ne $line) {
+        
+        if ($line -ne $null) {
             return $line
         } else {
+            Write-Host "No se recibió ninguna línea."
             return ""
         }
     }
@@ -51,46 +57,88 @@ function Send-SQLCommand {
     param (
         [string]$command
     )
+
     $client = New-Object System.Net.Sockets.Socket($ipEndPoint.AddressFamily, [System.Net.Sockets.SocketType]::Stream, [System.Net.Sockets.ProtocolType]::Tcp)
-    $client.Connect($ipEndPoint)
+
+    try {
+        $client.Connect($ipEndPoint)
+    } catch {
+        Write-Host -ForegroundColor Red "Error al conectar con el servidor: $_"
+        return
+    }
     
     $requestObject = [PSCustomObject]@{
         RequestType = 0;
-        RequestBody = $command
+        RequestBody  = $command
     }
 
-    Write-Host -ForegroundColor Green "Sending command: $command"
+    Write-Host -ForegroundColor Green "Enviando comando: $command"
 
     $jsonMessage = ConvertTo-Json -InputObject $requestObject -Compress
     Send-Message -client $client -message $jsonMessage
     $response = Receive-Message -client $client
 
-    Write-Host -ForegroundColor Green "Response received: $response"
-    
+    if ([string]::IsNullOrEmpty($response)) {
+        Write-Host -ForegroundColor Red "No se recibió respuesta del servidor."
+        return
+    }
+
     $responseObject = ConvertFrom-Json -InputObject $response
-    Write-Output $responseObject
+
+    # Cambiar el color de la salida según el valor de Status
+    switch ($responseObject.status) {
+        0 { $color = "Green" }
+        1 { $color = "Red" }
+        2 { $color = "Yellow" }
+        default { $color = "Green" } 
+    }
+
+    # Mostrar un mensaje breve de respuesta
+    Write-Host -ForegroundColor $color "Respuesta recibida con estado: $($responseObject.status)"
+
+    # Procesar datos en la respuesta
+    if ($responseObject.responseData -ne $null) {
+        $columns = $responseObject.responseData.columns
+        $rows = $responseObject.responseData.rows
+
+        # Convertir las filas a objetos de PowerShell
+        $data = foreach ($row in $rows) {
+            $obj = New-Object PSObject
+            foreach ($column in $columns) {
+                $value = $row.$column
+
+                # Convertir fechas de cadena a objetos DateTime
+                if ($value -is [string] -and $value -match '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}') {
+                    $value = [DateTime]$value
+                }
+
+                # Convertir números a cadenas para alinear a la izquierda
+                if ($value -is [int] -or $value -is [double]) {
+                    $value = $value.ToString()
+                }
+
+                $obj | Add-Member -MemberType NoteProperty -Name $column -Value $value
+            }
+            $obj
+        }
+
+        # Mostrar los datos en formato de tabla
+        $data | Format-Table -AutoSize
+    } else {
+        Write-Host -ForegroundColor $color $responseObject.responseBody
+    }
+
     $client.Shutdown([System.Net.Sockets.SocketShutdown]::Both)
     $client.Close()
 }
 
-# 1. Crear una tabla
-#Send-SQLCommand -command "CREATE TABLE ESTUDIANTES"
+# Bucle para aceptar comandos SQL
+while ($true) {
+    $sqlCommand = Read-Host "Ingrese su comando SQL (o escriba 'salir' para terminar)"
+    
+    if ($sqlCommand -eq "salir") {
+        break
+    }
 
-# 2. Insertar registros en la tabla
-#Send-SQLCommand -command "INSERT INTO ESTUDIANTES VALUES (1, 'Isaac', 'Ramirez')"
-#Send-SQLCommand -command "INSERT INTO ESTUDIANTES VALUES (2, 'Maria', 'Gonzalez')"
-
-# 3. Seleccionar registros de la tabla
-#Send-SQLCommand -command "SELECT * FROM ESTUDIANTES"
-
-# 4. Actualizar un registro
-#Send-SQLCommand -command "UPDATE ESTUDIANTES SET (1, 'Isaac', 'Lopez')"
-
-# 5. Seleccionar registros de nuevo para verificar la actualización
-#Send-SQLCommand -command "SELECT * FROM ESTUDIANTES"
-
-# 6. Eliminar un registro
-#Send-SQLCommand -command "DELETE FROM ESTUDIANTES WHERE id = 2"
-
-# 7. Seleccionar registros de nuevo para verificar la eliminación
-#Send-SQLCommand -command "SELECT * FROM ESTUDIANTES"
+    Send-SQLCommand -command $sqlCommand
+}
