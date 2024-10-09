@@ -6,18 +6,9 @@ namespace QueryProcessor.Operations
 {
     internal class Insert
     {
-        private readonly string _tableName;
-        private readonly string[] _values;
-
-        public Insert(string tableName, string[] values)
+        internal OperationStatus Execute(string TableName, List<String> Valores)
         {
-            _tableName = tableName;
-            _values = values;
-        }
-
-        public OperationStatus Execute()
-        {
-            return Store.GetInstance().Insert(_tableName, _values);
+            return Store.GetInstance().Insert(TableName, Valores);
         }
     }
 }

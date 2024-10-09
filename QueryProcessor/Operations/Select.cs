@@ -1,35 +1,52 @@
-﻿using Entities;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text.RegularExpressions;
+using Entities;
 using StoreDataManager;
 
 namespace QueryProcessor.Operations
 {
     internal class Select
     {
-        private readonly string _tableName;
-        private readonly List<string> _columns;
-        private string tableName;
-        private string[] columns;
-
-        // Constructor que acepta el nombre de la tabla y una lista de columnas
-        public Select(string tableName, List<string> columns)
+        public OperationStatus Execute(string sentence, out object? data)
         {
-            _tableName = tableName;
-            _columns = columns;
-        }
+            data = null;
 
-        public Select(string tableName, string[] columns)
-        {
-            this.tableName = tableName;
-            this.columns = columns;
-        }
+            // Mostrar la sentencia para depuración
+            Console.WriteLine($"Select.Execute - Sentencia recibida: {sentence}");
 
-        // Método de ejecución que realiza la selección
-        public OperationStatus Execute()
-        {
-            // Aquí puedes pasar el nombre de la tabla y columnas al Store
-            return Store.GetInstance().Select(_tableName, _columns);
+            // Obtener instancia del almacén de datos
+            var store = Store.GetInstance();
+
+            // Patrón regex para la sentencia SELECT
+            const string pattern = @"SELECT\s+(\*|\w+(?:\s*,\s*\w+)*)\s+FROM\s+(\w+)(?:\s+WHERE\s+(.+?))?(?:\s+ORDER\s+BY\s+(\w+)(?:\s+(ASC|DESC))?)?;?$";
+            var match = Regex.Match(sentence, pattern, RegexOptions.IgnoreCase);
+
+            // Verificar si la sentencia es válida
+            if (!match.Success)
+            {
+                Console.WriteLine("Sintaxis de SELECT incorrecta.");
+                return OperationStatus.Error;
+            }
+
+            // Extraer las diferentes partes de la sentencia
+            var columnsPart = match.Groups[1].Value;
+            var tableName = match.Groups[2].Value;
+            var whereClause = match.Groups[3].Success ? match.Groups[3].Value : null;
+            var orderByColumn = match.Groups[4].Success ? match.Groups[4].Value : null;
+            var orderByDirection = match.Groups[5].Success ? match.Groups[5].Value : "ASC"; // Por defecto ASC
+
+            // Obtener las columnas a seleccionar
+            List<string>? columnsToSelect = columnsPart.Trim() == "*"
+                ? null  // Null indica todas las columnas
+                : columnsPart.Split(',').Select(c => c.Trim()).ToList();
+
+            // Llamar al método SelectFromTable del almacén de datos y devolver el resultado
+            return store.Select(tableName, columnsToSelect, whereClause, orderByColumn, orderByDirection, out data);
         }
     }
 }
+
 
 
