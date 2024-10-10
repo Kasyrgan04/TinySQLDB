@@ -34,7 +34,7 @@ namespace QueryProcessor.Parser
                 return OperationStatus.Error;
             }
 
-            return new InsertInto().Execute(tableName, values);
+            return new Insert().Execute(tableName, values);
         }
 
         private List<string> ParseValues(string valuesPart)

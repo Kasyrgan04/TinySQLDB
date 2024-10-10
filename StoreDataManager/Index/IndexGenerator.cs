@@ -1,19 +1,14 @@
 ﻿using ApiInterface.Indexes;
 using QueryProcessor.Parser;
-using Entities;
 using StoreDataManager;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using DataType = Entities.DataType;
 
 namespace ApiInterface
 {
     public class IndexGenerator
     {
 
-        
+
 
         public void LoadIndexesAndGenerateTrees()
         {
@@ -54,25 +49,25 @@ namespace ApiInterface
 
 
                         // Agregar los datos a las listas del Store
-                       
 
-                        if (!store.DataBasesWithIndexes.Contains(DataBaseName))
+
+                        if (!store.IndexedDatabases.Contains(DataBaseName))
                         {
-                            store.DataBasesWithIndexes.Add(DataBaseName);
+                            store.IndexedDatabases.Add(DataBaseName);
                         }
 
-                        if (!store.TablesWithIndexes.Contains(tableName))
+                        if (!store.IndexedTables.Contains(tableName))
                         {
-                            store.TablesWithIndexes.Add(tableName);
+                            store.IndexedTables.Add(tableName);
                         }
 
-                        if (!store.ColumnsWithIndexes.Contains(columnName))
+                        if (!store.IndexedColumns.Contains(columnName))
                         {
-                            store.ColumnsWithIndexes.Add(columnName);
+                            store.IndexedColumns.Add(columnName);
                         }
 
                         // Asociar columna con nombre del índice
-                        store.AssociatedIndexesToColumns[columnName] = indexName;
+                        store.IndexesByColumns[columnName] = indexName;
 
 
                         // Verificar el tipo de índice y crear el árbol correspondiente
@@ -84,7 +79,7 @@ namespace ApiInterface
                                 foreach (var record in records)
                                 {
                                     int value = (int)record[columnName];
-                                    bst.insert(value,record); // Insertar valores en el BST
+                                    bst.insert(value, record); // Insertar valores en el BST
                                     //Console.WriteLine($"Valor {value} agregado al arbol del indice: {indexName}");
                                 }
 
@@ -195,7 +190,7 @@ namespace ApiInterface
                 }
             }
 
-            
+
         }
 
         public void RegenerateIndexes()
@@ -206,10 +201,10 @@ namespace ApiInterface
             store.IndexTrees.Clear(); // Esto borra todos los árboles de índices en memoria
 
             // Limpiar las listas de bases de datos, tablas y columnas con índices
-            store.DataBasesWithIndexes.Clear();
-            store.TablesWithIndexes.Clear();
-            store.ColumnsWithIndexes.Clear();
-            store.AssociatedIndexesToColumns.Clear();
+            store.IndexedDatabases.Clear();
+            store.IndexedTables.Clear();
+            store.IndexedColumns.Clear();
+            store.IndexesByColumns.Clear();
 
             // Volver a generar los índices
             LoadIndexesAndGenerateTrees();
