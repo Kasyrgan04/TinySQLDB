@@ -22,7 +22,7 @@ function Send-Message {
 
     try {
         $writer.WriteLine($message)
-        $writer.Flush()  # Asegúrate de que el mensaje se envíe
+        $writer.Flush()  
     }
     finally {
         $writer.Close()
@@ -85,7 +85,7 @@ function Send-SQLCommand {
 
     $responseObject = ConvertFrom-Json -InputObject $response
 
-    # Cambiar el color de la salida según el valor de Status
+    
     switch ($responseObject.status) {
         0 { $color = "Green" }
         1 { $color = "Red" }
@@ -93,26 +93,26 @@ function Send-SQLCommand {
         default { $color = "Green" } 
     }
 
-    # Mostrar un mensaje breve de respuesta
-    Write-Host -ForegroundColor $color "Respuesta recibida con estado: $($responseObject.status)"
+    
+    Write-Host -ForegroundColor $color "Respuesta recibida"
 
-    # Procesar datos en la respuesta
+    
     if ($responseObject.responseData -ne $null) {
         $columns = $responseObject.responseData.columns
         $rows = $responseObject.responseData.rows
 
-        # Convertir las filas a objetos de PowerShell
+        
         $data = foreach ($row in $rows) {
             $obj = New-Object PSObject
             foreach ($column in $columns) {
                 $value = $row.$column
 
-                # Convertir fechas de cadena a objetos DateTime
+                
                 if ($value -is [string] -and $value -match '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}') {
                     $value = [DateTime]$value
                 }
 
-                # Convertir números a cadenas para alinear a la izquierda
+                
                 if ($value -is [int] -or $value -is [double]) {
                     $value = $value.ToString()
                 }
@@ -122,7 +122,7 @@ function Send-SQLCommand {
             $obj
         }
 
-        # Mostrar los datos en formato de tabla
+        
         $data | Format-Table -AutoSize
     } else {
         Write-Host -ForegroundColor $color $responseObject.responseBody
@@ -132,11 +132,11 @@ function Send-SQLCommand {
     $client.Close()
 }
 
-# Bucle para aceptar comandos SQL
+
 while ($true) {
-    $sqlCommand = Read-Host "Ingrese su comando SQL (o escriba 'salir' para terminar)"
+    $sqlCommand = Read-Host "Ingrese un comando o escriba 'EXIT' para cerrar el programa"
     
-    if ($sqlCommand -eq "salir") {
+    if ($sqlCommand -eq "EXIT") {
         break
     }
 
