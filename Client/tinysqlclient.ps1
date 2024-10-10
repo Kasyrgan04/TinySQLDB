@@ -134,7 +134,7 @@ function Send-SQLCommand {
 
 
 while ($true) {
-    $sqlCommand = Read-Host "Ingrese un comando o escriba 'EXIT' para cerrar el programa"
+    $sqlCommand = Read-Host "Esperando comando. Para cerrar la sesión ingrese EXIT"
     
     if ($sqlCommand -eq "EXIT") {
         break

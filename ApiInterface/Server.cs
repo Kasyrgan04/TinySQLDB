@@ -25,7 +25,7 @@ namespace ApiInterface
 
             var indexGenerator = new Generator();
             indexGenerator.LoadIndexesAndGenerateTrees();
-            Console.WriteLine("Índices cargados y árboles generados en memoria.");
+            
 
 
             while (true)
