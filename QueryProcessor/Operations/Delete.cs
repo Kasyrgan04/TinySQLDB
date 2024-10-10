@@ -18,18 +18,18 @@ namespace QueryProcessor.Operations
 
             if (!match.Success)
             {
-                // Mostrar mensaje de error en la consola y retornar un estado de error
-                Console.WriteLine("Error de sintaxis.");
+                
+                Console.WriteLine("Sintaxis incorrecta");
                 return OperationStatus.Error;
             }
 
-            // Extraer el nombre de la tabla desde la sentencia
+            
             var tableName = match.Groups[1].Value;
 
-            // Verificar si se incluye WHERE
+            
             var where = match.Groups[2].Success ? match.Groups[2].Value : null;
 
-            // Llamar al método DeleteFromTable del almacén de datos y retornar el resultado
+            
             return store.Delete(tableName, where);
         }
     }

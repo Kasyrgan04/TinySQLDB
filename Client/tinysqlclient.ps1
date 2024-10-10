@@ -142,3 +142,5 @@ while ($true) {
 
     Send-SQLCommand -command $sqlCommand
 }
+
+
