@@ -574,6 +574,79 @@ namespace StoreDataManager
             return OperationStatus.Success;
         }
 
+        public OperationStatus CreateIndex(string indexName, string tableName, string columnName, string indexType)
+        {
+            // Verificar que la base de datos está establecida
+            if (string.IsNullOrEmpty(SettedDataBaseName))
+            {
+                Console.WriteLine("No se ha establecido una base de datos.");
+                return OperationStatus.Error;
+            }
+
+            // Verificar que la tabla existe
+            var tables = GetTablesInDataBase(SettedDataBaseName);
+            if (!tables.Contains(tableName, StringComparer.OrdinalIgnoreCase))
+            {
+                Console.WriteLine($"La tabla '{tableName}' no existe en la base de datos '{SettedDataBaseName}'.");
+                return OperationStatus.Error;
+            }
+
+            // Verificar que el tipo de índice sea válido (BST o BTREE)
+            if (!indexType.Equals("BST", StringComparison.OrdinalIgnoreCase) &&
+                !indexType.Equals("BTREE", StringComparison.OrdinalIgnoreCase))
+            {
+                Console.WriteLine($"El tipo de índice '{indexType}' no es válido. Solo se permiten 'BST' o 'BTREE'.");
+                return OperationStatus.Error;
+            }
+
+            // Obtener las columnas de la tabla
+            var allColumns = GetColumnsOfTable(SettedDataBaseName, tableName);
+
+            // Verificar si la columna especificada existe en la tabla
+            var column = allColumns.FirstOrDefault(c => c.Name.Equals(columnName, StringComparison.OrdinalIgnoreCase));
+            if (column == null)
+            {
+                Console.WriteLine($"La columna '{columnName}' no existe en la tabla '{tableName}'.");
+                return OperationStatus.Error;
+            }
+
+            // Verificar si ya existe un índice asociado a la columna
+            var existingIndex = GetIndexNameIfExist(SettedDataBaseName, tableName, columnName);
+            if (existingIndex != null)
+            {
+                Console.WriteLine($"Ya existe un índice asociado a la columna '{columnName}' en la tabla '{tableName}'. Índice existente: {existingIndex}");
+                return OperationStatus.Error;
+            }
+
+            // Obtener los datos de la columna
+            var columnData = GetColumnData(SettedDataBaseName, tableName, columnName);
+
+            // Verificar si hay datos duplicados
+            if (columnData.Count != columnData.Distinct().Count())
+            {
+                Console.WriteLine($"La columna '{columnName}' contiene datos duplicados. No se puede crear el índice.");
+                return OperationStatus.Error; // Retornar error si se encuentran datos duplicados
+            }
+
+            // Si no hay duplicados, proceder a crear el índice
+            using (var stream = File.Open(SystemIndexesFile, FileMode.OpenOrCreate, FileAccess.Write))
+            {
+                stream.Seek(0, SeekOrigin.End); // Mover el puntero al final para agregar nuevo índice
+
+                using (var writer = new BinaryWriter(stream))
+                {
+                    writer.Write(SettedDataBaseName);
+                    writer.Write(tableName);
+                    writer.Write(indexName);
+                    writer.Write(columnName);
+                    writer.Write(indexType);
+                }
+            }
+
+            Console.WriteLine($"Índice '{indexName}' creado exitosamente para la columna '{columnName}' en la tabla '{tableName}'.");
+
+            return OperationStatus.Success;
+        }
 
     }
 }
