@@ -13,36 +13,36 @@ namespace QueryProcessor.Operations
         {
             data = null;
 
-            // Mostrar la sentencia para depuración
-            Console.WriteLine($"Select.Execute - Sentencia recibida: {sentence}");
+            
+            Console.WriteLine($"Comando recibido: {sentence}");
 
-            // Obtener instancia del almacén de datos
+            
             var store = Store.GetInstance();
 
-            // Patrón regex para la sentencia SELECT
+            
             const string pattern = @"SELECT\s+(\*|\w+(?:\s*,\s*\w+)*)\s+FROM\s+(\w+)(?:\s+WHERE\s+(.+?))?(?:\s+ORDER\s+BY\s+(\w+)(?:\s+(ASC|DESC))?)?;?$";
             var match = Regex.Match(sentence, pattern, RegexOptions.IgnoreCase);
 
-            // Verificar si la sentencia es válida
+            
             if (!match.Success)
             {
-                Console.WriteLine("Sintaxis de SELECT incorrecta.");
+                Console.WriteLine("Error de sintaxis.");
                 return OperationStatus.Error;
             }
 
-            // Extraer las diferentes partes de la sentencia
+            
             var columnsPart = match.Groups[1].Value;
             var tableName = match.Groups[2].Value;
             var whereClause = match.Groups[3].Success ? match.Groups[3].Value : null;
             var orderByColumn = match.Groups[4].Success ? match.Groups[4].Value : null;
-            var orderByDirection = match.Groups[5].Success ? match.Groups[5].Value : "ASC"; // Por defecto ASC
+            var orderByDirection = match.Groups[5].Success ? match.Groups[5].Value : "ASC"; 
 
-            // Obtener las columnas a seleccionar
+            
             List<string>? columnsToSelect = columnsPart.Trim() == "*"
                 ? null  // Null indica todas las columnas
                 : columnsPart.Split(',').Select(c => c.Trim()).ToList();
 
-            // Llamar al método SelectFromTable del almacén de datos y devolver el resultado
+            
             return store.Select(tableName, columnsToSelect, whereClause, orderByColumn, orderByDirection, out data);
         }
     }

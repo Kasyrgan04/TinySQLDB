@@ -19,7 +19,7 @@ namespace QueryProcessor.Operations
             if (!match.Success)
             {
 
-                Console.WriteLine("Sintaxis incorrecta.");
+                Console.WriteLine("Error de sintaxis.");
                 return OperationStatus.Error;
             }
 

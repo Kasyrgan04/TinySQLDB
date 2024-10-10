@@ -1,25 +1,28 @@
-﻿using Entities;
-using StoreDataManager;
+﻿using StoreDataManager;
+using System.Text.RegularExpressions;
 
 namespace QueryProcessor.Operations
 {
     internal class Update
     {
-        private readonly string _tableName;
-        private readonly int _id;
-        private readonly string[] _newValues;
-
-        public Update(string tableName, int id, string[] newValues)
+        public OperationStatus Execute(string sentence)
         {
-            _tableName = tableName;
-            _id = id;
-            _newValues = newValues;
-        }
+            var store = Store.GetInstance();
+            var match = Regex.Match(sentence, @"UPDATE\s+(\w+)\s+SET\s+(\w+)\s*=\s*(.+?)\s+WHERE\s+(.+?);?$", RegexOptions.IgnoreCase);
 
-        public OperationStatus Execute()
-        {
-            return Store.GetInstance().Update(_tableName, _id, _newValues);
+            if (!match.Success)
+            {
+                Console.WriteLine("Error de sintaxis.");
+                return OperationStatus.Error;
+            }
+
+            string tableName = match.Groups[1].Value;
+            string columnName = match.Groups[2].Value;
+            string newValue = match.Groups[3].Value;
+            string whereClause = match.Groups[4].Value;
+
+            return store.Update(tableName, columnName, newValue, whereClause);
+
         }
     }
 }
-

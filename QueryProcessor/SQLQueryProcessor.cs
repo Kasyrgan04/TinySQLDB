@@ -1,80 +1,99 @@
-﻿using Entities;
-using QueryProcessor.Exceptions;
+﻿using QueryProcessor.Exceptions;
 using QueryProcessor.Operations;
-using StoreDataManager;
 using QueryProcessor.Parser;
-using System.Data.Common;
 
 namespace QueryProcessor
 {
     public class SQLQueryProcessor
     {
-        // Declarar el diccionario de manera que use la firma adecuada
-        private static readonly Dictionary<string, Func<string, OperationStatus>> CommandHandlers
-            = new Dictionary<string, Func<string, OperationStatus>>(StringComparer.OrdinalIgnoreCase)
-        {
-            { "CREATE DATABASE", sentence => new CreateDataBase().Execute(GetCommandArgument(sentence)) },
-            { "SET DATABASE", sentence => new SetDataBase().Execute(GetCommandArgument(sentence)) },
-            { "CREATE TABLE", ExecuteCreateTable },
-            { "DROP TABLE", sentence => new DropTable().Execute(GetCommandArgument(sentence)) },
-            { "CREATE INDEX", sentence => new CreateIndex().Execute(sentence) },
-            { "SELECT", ExecuteSelect },
-            { "INSERT INTO", sentence => new ParserInsert().Parser(sentence) },
-            { "UPDATE", sentence => new Update().Execute(sentence) },
-            { "DELETE", sentence => new Delete().Execute(sentence) }
-        };
-
         public static OperationStatus Execute(string sentence, out object? data)
         {
-            data = null; // Inicializar el parámetro out
 
-            foreach (var handler in CommandHandlers)
+            data = null;
+
+            if (sentence.StartsWith("CREATE DATABASE"))
             {
-                if (sentence.StartsWith(handler.Key, StringComparison.OrdinalIgnoreCase))
+                string DataBaseName = sentence.Substring("CREATE DATABASE".Length).Trim();
+                return new CreateDataBase().Execute(DataBaseName);
+            }
+            if (sentence.StartsWith("SET DATABASE"))
+            {
+                string SetDataBaseName = sentence.Substring("SET DATABASE".Length).Trim();
+                return new SetDatabase().Execute(SetDataBaseName);
+
+            }
+            if (sentence.StartsWith("CREATE TABLE"))
+            {
+                string TableInfo = sentence.Substring("CREATE TABLE".Length).Trim();
+                string TableName = new ParserTable().GetTableName(TableInfo);
+                string TableColumnsInfo = TableInfo.Substring(TableName.Length).Trim();
+                List<Column> TableColumns = new ParserTable().GetColumns(TableColumnsInfo);
+
+                return new CreateTable().Execute(TableName, TableColumns);
+            }
+
+            if (sentence.StartsWith("DROP TABLE"))
+            {
+                string TableToDrop = sentence.Substring("DROP TABLE".Length).Trim();
+
+                return new DropTable().Execute(TableToDrop);
+
+            }
+
+            if (sentence.StartsWith("CREATE INDEX", StringComparison.OrdinalIgnoreCase))
+            {
+                return new CreateIndex().Execute(sentence);
+            }
+
+
+            if (sentence.StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
+            {
+                // Verificar si la consulta es sobre el System Catalog
+                if (sentence.Contains("FROM SystemDatabases", StringComparison.OrdinalIgnoreCase))
                 {
-                    // Llamar al manejador y retornar el resultado
-                    return handler.Value(sentence);
+                    return new SelectSystemDataBases().Execute();
+                }
+                else if (sentence.Contains("FROM SystemTables", StringComparison.OrdinalIgnoreCase))
+                {
+                    return new SelectSystemTables().Execute();
+                }
+                else if (sentence.Contains("FROM SystemColumns", StringComparison.OrdinalIgnoreCase))
+                {
+                    return new SelectSystemColumns().Execute();
+                }
+                else
+                {
+                    // Implementar el SELECT normal sobre tablas de usuario
+                    return new Select().Execute(sentence, out data);
                 }
             }
 
-            throw new UnknownSQLSentenceException();
-        }
-
-        private static string GetCommandArgument(string sentence)
-        {
-            int index = sentence.IndexOf(' ') + 1; // Encuentra el primer espacio
-            return index < sentence.Length ? sentence.Substring(index).Trim() : string.Empty;
-        }
-
-        private static OperationStatus ExecuteCreateTable(string sentence)
-        {
-            string tableInfo = GetCommandArgument(sentence);
-            string tableName = new ParserTable().GetTableName(tableInfo);
-            string tableColumnsInfo = tableInfo.Substring(tableName.Length).Trim();
-            List<Column> tableColumns = new ParserTable().GetColumns(tableColumnsInfo);
-            return new CreateTable().Execute(tableName, tableColumns);
-        }
-
-        private static OperationStatus ExecuteSelect(string sentence)
-        {
-            // Verificar si la consulta es sobre el System Catalog
-            if (sentence.Contains("FROM SystemDatabases", StringComparison.OrdinalIgnoreCase))
+            if (sentence.StartsWith("INSERT INTO"))
             {
-                return new SelectSystemDataBases().Execute();
+
+                return new ParserInsert().Parser(sentence);
+
             }
-            else if (sentence.Contains("FROM SystemTables", StringComparison.OrdinalIgnoreCase))
+
+            if (sentence.StartsWith("UPDATE"))
             {
-                return new SelectSystemTables().Execute();
+                return new Update().Execute(sentence);
             }
-            else if (sentence.Contains("FROM SystemColumns", StringComparison.OrdinalIgnoreCase))
+
+            if (sentence.StartsWith("DELETE"))
             {
-                return new SelectSystemColumns().Execute();
+                return new Delete().Execute(sentence);
             }
+
+
+
             else
             {
-                // Implementar el SELECT normal sobre tablas de usuario
-                return new Select().Execute(sentence, out _);
+                throw new UnknownSQLSentenceException();
             }
         }
+
+
     }
+
 }

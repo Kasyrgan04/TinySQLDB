@@ -19,7 +19,7 @@ namespace QueryProcessor.Operations
             if (!match.Success)
             {
                 // Mostrar mensaje de error en la consola y retornar un estado de error
-                Console.WriteLine("Sintaxis incorrecta.");
+                Console.WriteLine("Error de sintaxis.");
                 return OperationStatus.Error;
             }
 
@@ -30,7 +30,7 @@ namespace QueryProcessor.Operations
             var where = match.Groups[2].Success ? match.Groups[2].Value : null;
 
             // Llamar al método DeleteFromTable del almacén de datos y retornar el resultado
-            return store.DeleteFromTable(tableName, where);
+            return store.Delete(tableName, where);
         }
     }
 }

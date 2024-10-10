@@ -6,6 +6,20 @@ using System.Threading.Tasks;
 
 namespace ApiInterface.Indexes
 {
+    public class TreeNode<T> where T : IComparable<T>
+    {
+        public T key;
+        public Dictionary<string, object> record; 
+        public TreeNode<T> left, right;
+
+        public TreeNode(T key, Dictionary<string, object> record)
+        {
+            this.key = key;
+            this.record = record; 
+            left = right = null;
+        }
+    }
+
     public class BinarySearchTree<T> where T : IComparable<T>
     {
         TreeNode<T> root;
