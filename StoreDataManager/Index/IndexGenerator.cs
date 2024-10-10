@@ -13,9 +13,8 @@ namespace ApiInterface
         public void LoadIndexesAndGenerateTrees()
         {
             var store = Store.GetInstance();
-            var auxIndex = new DatabaseManager();
-            var auxSel = new AuxSel();
-            string systemIndexesFile = auxIndex.GetIndexes();
+
+            string systemIndexesFile = store.GetIndexes();
 
             if (!File.Exists(systemIndexesFile))
             {
@@ -38,38 +37,38 @@ namespace ApiInterface
                         string columnName = reader.ReadString();
                         string indexType = reader.ReadString();
 
-                        DataType? columnDatatype = auxIndex.GetDatatype(DataBaseName, tableName, columnName);
+                        DataType? columnDatatype = store.GetDatatype(DataBaseName, tableName, columnName);
 
                         List<Column> allColumns = store.GetColumns(DataBaseName, tableName);
 
                         // Obtener los registros completos de la tabla
-                        List<Dictionary<string, object>> records = auxSel.GetData(DataBaseName, tableName, allColumns);
+                        List<Dictionary<string, object>> records = store.GetData(DataBaseName, tableName, allColumns);
 
 
                         // Acceder a la columna en el disco duro y obtener los datos
-                        List<object> columnData = auxIndex.GetColumn(DataBaseName, tableName, columnName);
+                        List<object> columnData = store.GetColumn(DataBaseName, tableName, columnName);
 
 
                         // Agregar los datos a las listas del Store
 
 
-                        if (!auxIndex.IndexedDatabases.Contains(DataBaseName))
+                        if (store.IndexedDatabases.Contains(DataBaseName))
                         {
-                            auxIndex.IndexedDatabases.Add(DataBaseName);
+                            store.IndexedDatabases.Add(DataBaseName);
                         }
 
-                        if (!auxIndex.IndexedTables.Contains(tableName))
+                        if (!store.IndexedTables.Contains(tableName))
                         {
-                            auxIndex.IndexedTables.Add(tableName);
+                            store.IndexedTables.Add(tableName);
                         }
 
-                        if (!auxIndex.IndexedColumns.Contains(columnName))
+                        if (!store.IndexedColumns.Contains(columnName))
                         {
-                            auxIndex.IndexedColumns.Add(columnName);
+                            store.IndexedColumns.Add(columnName);
                         }
 
                         // Asociar columna con nombre del índice
-                        auxIndex.IndexesByColumns[columnName] = indexName;
+                        store.IndexesByColumns[columnName] = indexName;
 
 
                         // Verificar el tipo de índice y crear el árbol correspondiente
@@ -86,7 +85,7 @@ namespace ApiInterface
                                 }
 
                                 // Guardar el árbol en el diccionario en memoria
-                                auxIndex.IndexTrees[indexName] = bst;
+                                store.IndexTrees[indexName] = bst;
 
                             }
 
@@ -99,7 +98,7 @@ namespace ApiInterface
                                     bst.insert(value, record);
                                     //Console.WriteLine($"Valor {value} agregado al árbol del índice: {indexName}");
                                 }
-                                auxIndex.IndexTrees[indexName] = bst;
+                                store.IndexTrees[indexName] = bst;
 
                             }
 
@@ -112,7 +111,7 @@ namespace ApiInterface
                                     bst.insert(value, record);
                                     //Console.WriteLine($"Valor {value} agregado al árbol del índice: {indexName}");
                                 }
-                                auxIndex.IndexTrees[indexName] = bst;
+                                store.IndexTrees[indexName] = bst;
 
                             }
 
@@ -125,7 +124,7 @@ namespace ApiInterface
                                     bst.insert(value, record);
                                     //Console.WriteLine($"Valor {value} agregado al árbol del índice: {indexName}");
                                 }
-                                auxIndex.IndexTrees[indexName] = bst;
+                                    store.IndexTrees[indexName] = bst;
 
                             }
 
@@ -143,7 +142,7 @@ namespace ApiInterface
                                     bTree.Insert(value, record);
                                     //Console.WriteLine($"Valor {value} agregado al árbol del índice: {indexName}");
                                 }
-                                auxIndex.IndexTrees[indexName] = bTree;
+                                store.IndexTrees[indexName] = bTree;
                             }
 
                             else if (columnDatatype == DataType.DOUBLE)
@@ -155,7 +154,7 @@ namespace ApiInterface
                                     bTree.Insert(value, record);
                                     //Console.WriteLine($"Valor {value} agregado al árbol del índice: {indexName}");
                                 }
-                                auxIndex.IndexTrees[indexName] = bTree;
+                                store.IndexTrees[indexName] = bTree;
                             }
 
                             else if (columnDatatype == DataType.VARCHAR)
@@ -167,7 +166,7 @@ namespace ApiInterface
                                     bTree.Insert(value, record);
                                     //Console.WriteLine($"Valor {value} agregado al árbol del índice: {indexName}");
                                 }
-                                auxIndex.IndexTrees[indexName] = bTree;
+                                store.IndexTrees[indexName] = bTree;
                             }
 
                             else if (columnDatatype == DataType.DATETIME)
@@ -179,7 +178,7 @@ namespace ApiInterface
                                     bTree.Insert(value, record);
                                     //Console.WriteLine($"Valor {value} agregado al árbol del índice: {indexName}");
                                 }
-                                auxIndex.IndexTrees[indexName] = bTree;
+                                store.IndexTrees[indexName] = bTree;
                             }
 
 
@@ -197,16 +196,16 @@ namespace ApiInterface
 
         public void RegenerateIndexes()
         {
-            var auxIndex = new DatabaseManager();
+            var store = Store.GetInstance();
 
             // Limpiar los árboles de índices en memoria
-            auxIndex.IndexTrees.Clear(); // Esto borra todos los árboles de índices en memoria
+            store.IndexTrees.Clear(); // Esto borra todos los árboles de índices en memoria
 
             // Limpiar las listas de bases de datos, tablas y columnas con índices
-            auxIndex.IndexedDatabases.Clear();
-            auxIndex.IndexedTables.Clear();
-            auxIndex.IndexedColumns.Clear();
-            auxIndex.IndexesByColumns.Clear();
+            store.IndexedDatabases.Clear();
+            store.IndexedTables.Clear();
+            store.IndexedColumns.Clear();
+            store.IndexesByColumns.Clear();
 
             // Volver a generar los índices
             LoadIndexesAndGenerateTrees();

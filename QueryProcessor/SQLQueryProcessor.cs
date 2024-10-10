@@ -1,4 +1,5 @@
-﻿using QueryProcessor.Exceptions;
+﻿using Entities;
+using QueryProcessor.Exceptions;
 using QueryProcessor.Operations;
 using QueryProcessor.Parser;
 

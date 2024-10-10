@@ -18,9 +18,7 @@ namespace StoreDataManager
         private static Store? instance = null;
         private static readonly object _lock = new object();
 
-        private DatabaseManager databaseManager = new();
-        private AuxInsert auxInsert = new();
-        public AuxSel auxSel = new();
+
 
         public static Store GetInstance()
         {
@@ -99,8 +97,6 @@ namespace StoreDataManager
                 Console.WriteLine($"Establecido en {toSet} ");
                 this.CurrentDatabasePath = DataBasePath;
                 this.CurrentDatabaseName = toSet;
-                this.databaseManager.CurrentDatabaseName = DataBasePath;
-                this.databaseManager.CurrentDatabasePath = toSet;
                 Console.WriteLine($"Ruta {DataBasePath}");
                 return OperationStatus.Success;
 
@@ -532,13 +528,13 @@ namespace StoreDataManager
 
                 try
                 {
-                    var convertedValue = auxInsert.Convert(valueStr, column.DataType, column.MaxSize);
+                    var convertedValue = Convert(valueStr, column.DataType, column.MaxSize);
                     converted.Add(convertedValue);
 
                     // Verifica duplicados en columnas indexadas
-                    if (databaseManager.GetName(CurrentDatabaseName, tableName, column.Name) != null)
+                    if (GetName(CurrentDatabaseName, tableName, column.Name) != null)
                     {
-                        var columnData = databaseManager.GetColumn(CurrentDatabaseName, tableName, column.Name);
+                        var columnData = GetColumn(CurrentDatabaseName, tableName, column.Name);
                         if (columnData.Contains(convertedValue))
                         {
                             Console.WriteLine($"El valor ya existe en la columna.");
@@ -563,7 +559,7 @@ namespace StoreDataManager
                     foreach (var value in converted)
                     {
                         
-                        auxInsert.Write(writer, value);
+                        Write(writer, value);
                     }
                 }
 
@@ -629,7 +625,7 @@ namespace StoreDataManager
             }
 
             
-            var existingIndex = databaseManager.GetIndex(CurrentDatabaseName, tableName, columnName);
+            var existingIndex = GetIndex(CurrentDatabaseName, tableName, columnName);
             if (existingIndex != null)
             {
                 Console.WriteLine($"Ya existe un índice asociado a la columna '{columnName}' en la tabla '{tableName}'. Índice existente: {existingIndex}");
@@ -637,7 +633,7 @@ namespace StoreDataManager
             }
 
             // Obtener los datos de la columna
-            var columnData = databaseManager.GetColumn(CurrentDatabaseName, tableName, columnName);
+            var columnData = GetColumn(CurrentDatabaseName, tableName, columnName);
 
             // Verificar si hay datos duplicados
             if (columnData.Count != columnData.Distinct().Count())
@@ -718,14 +714,14 @@ namespace StoreDataManager
             var records = new List<Dictionary<string, object>>();
 
            
-            if (databaseManager.IndexedDatabases.Contains(CurrentDatabaseName) && databaseManager.IndexedTables.Contains(tableName))
+            if (IndexedDatabases.Contains(CurrentDatabaseName) && IndexedTables.Contains(tableName))
             {
                 foreach (var col in selectedColumns)
                 {
-                    string? indexName = databaseManager.GetIndex(CurrentDatabaseName, tableName, col.Name);
+                    string? indexName = GetIndex(CurrentDatabaseName, tableName, col.Name);
                     if (indexName != null)
                     {
-                        records = databaseManager.GetRecords(indexName);
+                        records = GetRecords(indexName);
                         Console.WriteLine("USANDO ÍNDICES EN MEMORIA PARA ESTE REQUEST");
                         break; // Utiliza solo el primer índice encontrado
                     }
@@ -735,9 +731,7 @@ namespace StoreDataManager
             if (records == null || records.Count == 0)
             {
                 Console.WriteLine("No se encontraron índices asociados. Leyendo toda la tabla.");
-                auxSel.CurrentDatabasePath = CurrentDatabasePath;
-                auxSel.CurrentDatabaseName = CurrentDatabaseName;
-                records = auxSel.GetRecords(tableName, allColumns);
+                records = GetRecords(tableName, allColumns);
             }
 
             if (records == null)
@@ -749,7 +743,7 @@ namespace StoreDataManager
             // Aplicar cláusula WHERE si es necesario
             if (!string.IsNullOrEmpty(whereClause))
             {
-                records = auxSel.FilteredByWhere(records, whereClause, tableName, allColumns, mode, null, null);
+                records = FilteredByWhere(records, whereClause, tableName, allColumns, mode, null, null);
                 if (records == null)
                 {
                     Console.WriteLine("Error al aplicar la cláusula WHERE.");
@@ -767,7 +761,7 @@ namespace StoreDataManager
                     return OperationStatus.Error;
                 }
 
-                records = auxSel.FilteredByOrder(records, orderByColumn, orderByDirection, tableName, allColumns);
+                records = FilteredByOrder(records, orderByColumn, orderByDirection, tableName, allColumns);
                 if (records == null)
                 {
                     Console.WriteLine("Error al aplicar el ordenamiento.");
@@ -794,7 +788,7 @@ namespace StoreDataManager
             };
 
             // Mostrar los registros en formato de tabla
-            auxSel.PrintRecords(selectedColumns, records);
+            PrintRecords(selectedColumns, records);
 
             return OperationStatus.Success;
         }
@@ -819,7 +813,7 @@ namespace StoreDataManager
 
             // Obtener las columnas de la tabla
             List<Column> allColumns = GetColumns(CurrentDatabaseName, tableName);
-            List<Dictionary<string, object>> records = auxSel.GetRecords(tableName, allColumns);
+            List<Dictionary<string, object>> records = GetRecords(tableName, allColumns);
             string mode = "UPDATE";
             object convertedValue;
 
@@ -839,7 +833,7 @@ namespace StoreDataManager
 
             try
             {
-                convertedValue = auxInsert.Convert(newValue, targetColumn.DataType, targetColumn.MaxSize);
+                convertedValue = Convert(newValue, targetColumn.DataType, targetColumn.MaxSize);
             }
             catch (Exception ex)
             {
@@ -859,7 +853,7 @@ namespace StoreDataManager
             // Aplicar la cláusula WHERE si existe
             if (!string.IsNullOrEmpty(whereClause))
             {
-                records = auxSel.FilteredByWhere(records, whereClause, tableName, allColumns, mode, columnName, convertedValue);
+                records = FilteredByWhere(records, whereClause, tableName, allColumns, mode, columnName, convertedValue);
                 if (records == null)
                 {
                     return OperationStatus.Error;
@@ -884,7 +878,7 @@ namespace StoreDataManager
                         foreach (var column in allColumns)
                         {
                             object value = record[column.Name];
-                            auxInsert.Write(writer, value);
+                            Write(writer, value);
                         }
                     }
                 }
@@ -935,7 +929,7 @@ namespace StoreDataManager
 
             // Obtener las columnas de la tabla
             List<Column> allColumns = GetColumns(CurrentDatabaseName, tableName);
-            List<Dictionary<string, object>> records = auxSel.GetRecords(tableName, allColumns);
+            List<Dictionary<string, object>> records = GetRecords(tableName, allColumns);
             List<Dictionary<string, object>> recordsToDelete = new List<Dictionary<string, object>>();
 
             if (records == null)
@@ -947,7 +941,7 @@ namespace StoreDataManager
             // Filtrar registros si hay cláusula WHERE
             if (!string.IsNullOrEmpty(whereClause))
             {
-                recordsToDelete = auxSel.FilteredByWhere(records, whereClause, tableName, allColumns, mode, null, null);
+                recordsToDelete = FilteredByWhere(records, whereClause, tableName, allColumns, mode, null, null);
                 if (records == null)
                 {
                     return OperationStatus.Error;
@@ -969,7 +963,7 @@ namespace StoreDataManager
                         foreach (var column in allColumns)
                         {
                             object value = record[column.Name];
-                            auxInsert.Write(writer, value);
+                            Write(writer, value);
                         }
                     }
                 }
@@ -1010,7 +1004,7 @@ namespace StoreDataManager
             }
 
 
-            List<string> tables = store.GetTables(databaseName);
+            List<string> tables = GetTables(databaseName);
             if (!tables.Contains(tableName))
             {
                 Console.WriteLine($"La tabla '{tableName}' no existe en la base de datos '{databaseName}'.");
@@ -1018,7 +1012,7 @@ namespace StoreDataManager
             }
 
 
-            List<Column> allColumns = store.GetColumns(databaseName, tableName);
+            List<Column> allColumns = GetColumns(databaseName, tableName);
 
 
             var targetColumn = allColumns.FirstOrDefault(c => c.Name.Equals(columnName, StringComparison.OrdinalIgnoreCase));
@@ -1054,7 +1048,7 @@ namespace StoreDataManager
                 {
                     for (int i = 0; i < allColumns.Count; i++)
                     {
-                        object value = new AuxSel().Read(reader, allColumns[i].DataType);
+                        object value = Read(reader, allColumns[i].DataType);
 
 
                         if (i == columnIndex)
@@ -1083,7 +1077,7 @@ namespace StoreDataManager
             }
 
 
-            List<string> tables = store.GetTables(baseName);
+            List<string> tables = GetTables(baseName);
             if (!tables.Contains(tableName))
             {
                 Console.WriteLine($"'{tableName}' no existe '{baseName}'.");
@@ -1091,7 +1085,7 @@ namespace StoreDataManager
             }
 
 
-            List<Column> allColumns = store.GetColumns(baseName, tableName);
+            List<Column> allColumns = GetColumns(baseName, tableName);
 
 
             var targetColumn = allColumns.FirstOrDefault(c => c.Name.Equals(columnName, StringComparison.OrdinalIgnoreCase));
