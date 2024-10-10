@@ -577,11 +577,5 @@ namespace StoreDataManager
         }
 
 
-
-
-
-
-
-
     }
 }
