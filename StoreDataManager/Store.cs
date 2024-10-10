@@ -1,15 +1,9 @@
-﻿using Entities;
-using System.ComponentModel.DataAnnotations;
+﻿using ApiInterface;
 using ApiInterface.Indexes;
-using StoreDataManager;
-using System.Data.Common;
-using System.Runtime.Serialization.Formatters.Binary;
-using System.Text;
+using Entities;
 using QueryProcessor.Parser;
-using DataType = Entities.DataType;
-using ApiInterface;
-using static System.Formats.Asn1.AsnWriter;
 using System.Text.RegularExpressions;
+using DataType = Entities.DataType;
 
 namespace StoreDataManager
 {
@@ -50,8 +44,8 @@ namespace StoreDataManager
         public List<string> IndexedColumns = new List<string>();
 
         //Manejo de bases de datos
-        public string CurrentDatabasePath = string.Empty;
-        public string CurrentDatabaseName = string.Empty;
+        public string CurrentPath = string.Empty;
+        public string CurrentName = string.Empty;
 
         public Store()
         {
@@ -66,54 +60,51 @@ namespace StoreDataManager
             Directory.CreateDirectory(SystemCatalogPath);
         }
 
-        //Funciones para la creacion y manejo de las bases de datos
+        //Funciones para el manejo de la base de datos
 
         public OperationStatus CreateDataBase(string CreateDataBaseName)
         {
-            //En caso de que la base ya exista
+            // Creates a default DB called TESTDB
             if (Directory.Exists($@"{DataPath}\{CreateDataBaseName}"))
             {
                 Console.WriteLine("La base ya existe");
                 return OperationStatus.Error;
             }
 
-            //Si la base no existe entonces la crea
             Directory.CreateDirectory($@"{DataPath}\{CreateDataBaseName}");
 
-            //Se agrega la base al SystemCatalog
-            AddBaseToSystem(CreateDataBaseName);
+            AddDataBase(CreateDataBaseName);
 
             Console.WriteLine("Base de datos creada correctamente");
 
             return OperationStatus.Success;
         }
 
-        public OperationStatus SetDatabase(string toSet)
+        public OperationStatus SetDatabase(string SetDataBaseName)
         {
-            string DataBasePath = $@"{DataPath}\{toSet}";
+            string DataBasePath = $@"{DataPath}\{SetDataBaseName}";
 
             if (Directory.Exists(DataBasePath))
             {
-                Console.WriteLine($"Establecido en {toSet} ");
-                this.CurrentDatabasePath = DataBasePath;
-                this.CurrentDatabaseName = toSet;
-                Console.WriteLine($"Ruta {DataBasePath}");
+                Console.WriteLine("Establecido en la base");
+                this.CurrentPath = DataBasePath;
+                this.CurrentName = SetDataBaseName;
+                Console.WriteLine($"Actualmente en: {DataBasePath}");
                 return OperationStatus.Success;
 
             }
             else
             {
-                Console.WriteLine("La base de datos no existe");
+                Console.WriteLine("La base especificada no ha sido creada");
                 return OperationStatus.Error;
             }
         }
 
-        public void AddBaseToSystem(string DataBaseName)
+        public void AddDataBase(string DataBaseName)
         {
-            
             using (FileStream stream = File.Open(SystemDatabasesFile, FileMode.OpenOrCreate, FileAccess.Write))
             {
-                // Posiciona el puntero al final del archivo para añadir el nombre
+
                 stream.Seek(0, SeekOrigin.End);
 
                 using (BinaryWriter writer = new BinaryWriter(stream))
@@ -125,457 +116,365 @@ namespace StoreDataManager
 
         public List<string> GetDataBases()
         {
-            try
+
+            List<string> databases = new List<string>();
+
+
+            if (!File.Exists(SystemDatabasesFile))
             {
-                using (FileStream stream = new FileStream(SystemDatabasesFile, FileMode.Open, FileAccess.Read))
-                using (BinaryReader reader = new BinaryReader(stream))
+                return databases;
+            }
+
+            using (FileStream stream = new FileStream(SystemDatabasesFile, FileMode.Open, FileAccess.Read))
+            using (BinaryReader reader = new(stream))
+            {
+                while (stream.Position < stream.Length)
                 {
-                    List<string> Bases = new List<string>();
-
-                    // Leer todos los nombres de bases de datos
-                    while (stream.Position < stream.Length)
-                    {
-                        string databaseName = reader.ReadString();
-                        Bases.Add(databaseName);
-                    }
-
-                    return Bases;
+                    string databaseName = reader.ReadString();
+                    databases.Add(databaseName);
                 }
             }
-            catch (FileNotFoundException)
-            {
-                // Si el archivo no existe entonces se retorna una lista vacía
-                return new List<string>();
-            }
-            catch (IOException ex)
-            {
-                
-                Console.WriteLine($"Error al leer el archivo: {ex.Message}");
-                return new List<string>();
-            }
+
+            return databases;
         }
 
-        //Funciones para la creacion y manejo de las tablas
+
+
+
+        //Funciones para el manejo de las tablas
 
         public OperationStatus CreateTable(string TableName, List<Column> TableColumns)
         {
-            // Verificar si hay una base de datos activa
-            if (!IsDatabaseSet())
+
+            if (string.IsNullOrEmpty(CurrentPath))
             {
-                Console.WriteLine("No existe una base de datos establecida");
+                Console.WriteLine("No existe una base establecida");
                 return OperationStatus.Error;
             }
 
-            
-            string tablePath = Path.Combine(CurrentDatabasePath, $"{TableName}.table");
+            string tablePath = $@"{CurrentPath}\{TableName}.table";
 
-            // Verificar si la tabla ya existe
             if (File.Exists(tablePath))
             {
-                Console.WriteLine($"La tabla '{TableName}' ya existe en: '{CurrentDatabasePath}'.");
-                return OperationStatus.Error; 
-            }
-
-            try
-            {
-               
-                using (FileStream stream = File.Open(tablePath, FileMode.Create))
-
-
-                // Agregar la tabla y las columnas al SystemCatalog
-                AddTable(TableName);
-                AddColumn(TableName, TableColumns);
-
-
-                Console.WriteLine($"Tabla '{TableName}' creada exitosamente en: '{CurrentDatabaseName}'.");
-                return OperationStatus.Success;
-            }
-            catch (IOException ex)
-            {
-                Console.WriteLine($"Error al crear la tabla '{TableName}': {ex.Message}");
+                Console.WriteLine("Tabla ya existente en otra base");
                 return OperationStatus.Error;
             }
+
+            using (FileStream stream = File.Open(tablePath, FileMode.Create))
+
+
+                // Agrega la tabla al SystemCatalog
+                AddTable(TableName);
+            AddColums(TableName, TableColumns);
+
+            Console.WriteLine("La tabla fue creada.");
+            return OperationStatus.Success;
         }
 
-        // Verifica si la base de datos está activa
-        private bool IsDatabaseSet()
+        private void AddTable(string TableName)
         {
-            return !string.IsNullOrEmpty(CurrentDatabasePath);
-        }
-
-        private void AddTable(string tableName)
-        {
-            try
+            using (FileStream stream = File.Open(SystemTablesFile, FileMode.OpenOrCreate, FileAccess.Write))
             {
-                using (FileStream stream = File.Open(SystemTablesFile, FileMode.OpenOrCreate, FileAccess.Write))
-                {
-                    
-                    stream.Seek(0, SeekOrigin.End);
+                stream.Seek(0, SeekOrigin.End);
 
-                    using (BinaryWriter writer = new BinaryWriter(stream))
-                    {
-                        
-                        writer.Write(CurrentDatabaseName);
-                        writer.Write(tableName);
-                    }
+                using (BinaryWriter writer = new BinaryWriter(stream))
+                {
+                    writer.Write(CurrentName);
+                    writer.Write(TableName);
                 }
             }
-            catch (IOException ex)
-            {
-                
-                Console.WriteLine($"Error al agregar '{tableName}' al SystemCatalog: {ex.Message}");
-            }
         }
 
-        public List<string> GetTables(string databaseName)
+        public List<string> GetTables(string BaseName)
         {
-            // Almacena los nombres de las tablas
             List<string> tables = new List<string>();
 
-            
+
             if (!File.Exists(SystemTablesFile))
             {
-                return tables; 
+                return tables;
             }
 
-            try
+            using (FileStream stream = new FileStream(SystemTablesFile, FileMode.Open, FileAccess.Read))
+            using (BinaryReader reader = new(stream))
             {
-                using (FileStream stream = new FileStream(SystemTablesFile, FileMode.Open, FileAccess.Read))
-                using (BinaryReader reader = new BinaryReader(stream))
+                while (stream.Position < stream.Length)
                 {
-                    while (stream.Position < stream.Length)
-                    {
-                        string baseName = reader.ReadString(); 
-                        string tableName = reader.ReadString(); 
+                    string dbName = reader.ReadString();
+                    string tableName = reader.ReadString();
 
-                        
-                        if (baseName.Equals(databaseName, StringComparison.OrdinalIgnoreCase))
-                        {
-                            tables.Add(tableName);
-                        }
+                    if (dbName == BaseName)
+                    {
+                        tables.Add(tableName);
                     }
                 }
             }
-            catch (IOException ex)
-            {
-                Console.WriteLine($"Error al leer las tablas existentes: {ex.Message}");
-            }
 
-            return tables; 
+            return tables;
         }
 
-        public OperationStatus DropTable(string TableToDrop)
-        {            
-            if (string.IsNullOrEmpty(CurrentDatabasePath))
+        public OperationStatus Drop(string TableToDrop)
+        {
+
+            if (string.IsNullOrEmpty(CurrentPath))
             {
-                Console.WriteLine("No hay una base de datos establecida.");
+                Console.WriteLine("No existe una base establecida");
                 return OperationStatus.Error;
             }
 
-            string tablePath = $@"{CurrentDatabasePath}\{TableToDrop}";
+            string tablePath = $@"{CurrentPath}\{TableToDrop}";
 
-            if (!File.Exists(tablePath))
+            if (File.Exists(tablePath))
             {
-                Console.WriteLine($"La tabla '{TableToDrop}' no existe.");
-                return OperationStatus.Error;
-            }
 
-            try
-            {
-                // Verifica que la tabla está vacía
-                if (new FileInfo(tablePath).Length == 0)
+                string[] TableContent = File.ReadAllLines(tablePath);
+
+
+                if (TableContent.Length == 0)
                 {
-                    //Si esta vacia procede a eliminarla
-                    Console.WriteLine("La tabla vacía, procediendo a su eliminación.");
+                    Console.WriteLine("Procediendo a eliminar tabla");
                     File.Delete(tablePath);
-                    RemoveTable(TableToDrop);
-                    RemoveColumns(TableToDrop);
-                    Console.WriteLine($"'{TableToDrop}' ha sido eliminada exitosamente.");
-                    return OperationStatus.Success;
                 }
                 else
                 {
-                    Console.WriteLine("La tabla no está vacía, no es posible eliminarla.");
+                    Console.WriteLine("No es posible eliminar una tabla con contenido.");
                     return OperationStatus.Error;
                 }
             }
-            catch (IOException ex)
+
+            else
             {
-                Console.WriteLine($"Error al eliminar la tabla: {ex.Message}");
+                Console.WriteLine($"La tabla solicitada no existe.");
                 return OperationStatus.Error;
             }
+
+            //Elimina las referencias del SystemCatalog
+            RemoveTable(TableToDrop);
+
+            RemoveColumns(TableToDrop);
+
+            return OperationStatus.Success;
         }
 
         private void RemoveTable(string TableToDrop)
         {
             string tempPath = $@"{SystemCatalogPath}\SystemTables_Temp.table";
-                        
-            if (File.Exists(tempPath))
+            using (FileStream fs = new FileStream(SystemTablesFile, FileMode.OpenOrCreate, FileAccess.Read))
+            using (FileStream fsTemp = new FileStream(tempPath, FileMode.OpenOrCreate, FileAccess.Write))
+            using (BinaryReader reader = new BinaryReader(fs))
+            using (BinaryWriter writer = new BinaryWriter(fsTemp))
             {
-                File.Delete(tempPath);
-            }
-
-            try
-            {
-                using (FileStream fs = new FileStream(SystemTablesFile, FileMode.Open, FileAccess.Read))
-                using (FileStream fsTemp = new FileStream(tempPath, FileMode.Create, FileAccess.Write))
-                using (BinaryReader reader = new BinaryReader(fs))
-                using (BinaryWriter writer = new BinaryWriter(fsTemp))
+                while (fs.Position < fs.Length)
                 {
-                    while (fs.Position < fs.Length)
+                    string dbName = reader.ReadString();
+                    string tblName = reader.ReadString();
+
+                    if (!(dbName == CurrentName && tblName == TableToDrop))
                     {
-                        string baseName = reader.ReadString();
-                        string tableName = reader.ReadString();
-                                                
-                        if (!(baseName == CurrentDatabaseName && tableName == TableToDrop))
-                        {
-                            writer.Write(baseName);
-                            writer.Write(tableName);
-                        }
+                        writer.Write(dbName);
+                        writer.Write(tblName);
                     }
                 }
-
-                File.Delete(SystemTablesFile);
-                File.Move(tempPath, SystemTablesFile);
             }
-            catch (IOException ex)
+            File.Delete(SystemTablesFile);
+            File.Move(tempPath, SystemTablesFile);
+        }
+
+
+        //Funciones para el manejo de las columnas
+
+        private void AddColums(string TableName, List<Column> Columns)
+        {
+            using (FileStream stream = File.Open(SystemColumnsFile, FileMode.OpenOrCreate, FileAccess.Write))
             {
-                Console.WriteLine($"Error al eliminar la tabla: {ex.Message}");
+                stream.Seek(0, SeekOrigin.End);
+
+                using (BinaryWriter writer = new(stream))
+                {
+                    foreach (Column Column in Columns)
+                    {
+                        writer.Write(CurrentName);
+                        writer.Write(TableName);
+                        writer.Write(Column.Name);
+                        writer.Write(Column.DataType.ToString());
+                        writer.Write(Column.MaxSize.HasValue ? Column.MaxSize.Value : 0);
+                    }
+                }
             }
         }
 
-        //Funciones para la creacion y manejo de columnas
-
-        private void AddColumn(string TableName, List<Column> Columns)
+        public List<Column> GetColumns(string BaseName, string TableName)
         {
-            // Valida que la lista de columnas no esté vacía
-            if (Columns == null || Columns.Count == 0)
-            {
-                Console.WriteLine("No hay columnas para agregar.");
-                return;
-            }
 
-            try
-            {
-                using (FileStream stream = File.Open(SystemColumnsFile, FileMode.OpenOrCreate, FileAccess.Write))
-                {
-                    stream.Seek(0, SeekOrigin.End);
-
-                    using (BinaryWriter writer = new(stream))
-                    {
-                        foreach (Column column in Columns)
-                        {
-                            writer.Write(CurrentDatabaseName);
-                            writer.Write(TableName);
-                            writer.Write(column.Name);
-                            writer.Write(column.DataType.ToString());
-                            writer.Write(column.MaxSize.HasValue ? column.MaxSize.Value : 0); 
-                        }
-                    }
-                }
-
-                Console.WriteLine($"Se han agregado {Columns.Count} columnas a la tabla '{TableName}' en '{CurrentDatabaseName}'.");
-            }
-            catch (IOException ex)
-            {
-                Console.WriteLine($"Error al agregar columnas: {ex.Message}");
-            }
-        }
-
-        public List<Column> GetColumns(string databaseName, string tableName)
-        {
             List<Column> columns = new List<Column>();
-
-            // Valida que los nombres no sean nulos o vacíos
-            if (string.IsNullOrEmpty(databaseName) || string.IsNullOrEmpty(tableName))
-            {
-                Console.WriteLine("El nombre de base de datos o tabla no puede ser nulo o vacío.");
-                return columns;
-            }
 
             if (!File.Exists(SystemColumnsFile))
             {
-                Console.WriteLine("El archivo de columnas no existe en el SystemCatalog.");
                 return columns;
             }
 
-            try
+            using (FileStream stream = new FileStream(SystemColumnsFile, FileMode.Open, FileAccess.Read))
+            using (BinaryReader reader = new BinaryReader(stream))
             {
-                using (FileStream stream = new FileStream(SystemColumnsFile, FileMode.Open, FileAccess.Read))
-                using (BinaryReader reader = new BinaryReader(stream))
+                while (stream.Position < stream.Length)
                 {
-                    while (stream.Position < stream.Length)
-                    {
-                        string baseName = reader.ReadString();
-                        string tableName_ = reader.ReadString();
-                        string columnName = reader.ReadString();
-                        string dataTypeStr = reader.ReadString();
-                        int maxSize = reader.ReadInt32();
+                    string dbName = reader.ReadString();
+                    string tblName = reader.ReadString();
+                    string columnName = reader.ReadString();
+                    string dataTypeStr = reader.ReadString();
+                    int maxSize = reader.ReadInt32();
 
-                        // Filtra por base de datos y tabla
-                        if (baseName == databaseName && tableName_ == tableName)
+                    if (dbName == BaseName && tblName == TableName)
+                    {
+                        Column column = new Column
                         {
-                            // Usar Enum.TryParse para manejar posibles errores
-                            if (Enum.TryParse<DataType>(dataTypeStr, out DataType dataType))
-                            {
-                                Column column = new Column
-                                {
-                                    Name = columnName,
-                                    DataType = dataType,
-                                    MaxSize = maxSize > 0 ? maxSize : (int?)null
-                                };
-                                columns.Add(column);
-                            }
-                            else
-                            {
-                                Console.WriteLine($"Tipo de dato: {dataTypeStr} no válido para la columna {columnName}");
-                            }
-                        }
+                            Name = columnName,
+                            DataType = Enum.Parse<DataType>(dataTypeStr),
+                            MaxSize = maxSize > 0 ? maxSize : null
+                        };
+                        columns.Add(column);
                     }
                 }
             }
-            catch (IOException ex)
-            {
-                Console.WriteLine($"Error al leer el archivo: {ex.Message}");
-            }
+
+
 
             return columns;
         }
 
-        private void RemoveColumns(string tableName)
+        private void RemoveColumns(string TableName)
         {
-            if (string.IsNullOrEmpty(tableName))
-            {
-                Console.WriteLine("El nombre de la tabla no puede ser nulo o vacío.");
-                return;
-            }
-
             string tempPath = $@"{SystemCatalogPath}\SystemColumns_Temp.table";
-
-            try
+            using (FileStream fs = new FileStream(SystemColumnsFile, FileMode.OpenOrCreate, FileAccess.Read))
+            using (FileStream fsTemp = new FileStream(tempPath, FileMode.OpenOrCreate, FileAccess.Write))
+            using (BinaryReader reader = new BinaryReader(fs))
+            using (BinaryWriter writer = new BinaryWriter(fsTemp))
             {
-                using (FileStream fs = new FileStream(SystemColumnsFile, FileMode.OpenOrCreate, FileAccess.Read))
-                using (FileStream fsTemp = new FileStream(tempPath, FileMode.Create, FileAccess.Write))
-                using (BinaryReader reader = new BinaryReader(fs))
-                using (BinaryWriter writer = new BinaryWriter(fsTemp))
+                while (fs.Position < fs.Length)
                 {
-                    while (fs.Position < fs.Length)
-                    {
-                        string baseName = reader.ReadString();
-                        string tableName_ = reader.ReadString();
-                        string columnName = reader.ReadString();
-                        string dataTypeStr = reader.ReadString();
-                        int maxSize = reader.ReadInt32();
+                    string dbName = reader.ReadString();
+                    string tblName = reader.ReadString();
+                    string columnName = reader.ReadString();
+                    string dataTypeStr = reader.ReadString();
+                    int maxSize = reader.ReadInt32();
 
-                        if (!(baseName == CurrentDatabaseName && tableName_ == tableName))
-                        {
-                            writer.Write(baseName);
-                            writer.Write(tableName_);
-                            writer.Write(columnName);
-                            writer.Write(dataTypeStr);
-                            writer.Write(maxSize);
-                        }
+                    if (!(dbName == CurrentName && tblName == TableName))
+                    {
+
+                        writer.Write(dbName);
+                        writer.Write(tblName);
+                        writer.Write(columnName);
+                        writer.Write(dataTypeStr);
+                        writer.Write(maxSize);
                     }
                 }
+            }
 
-                File.Delete(SystemColumnsFile);
-                File.Move(tempPath, SystemColumnsFile);
-            }
-            catch (IOException ex)
-            {
-                Console.WriteLine($"Error al eliminar columnas de la tabla: {ex.Message}");
-            }
-            finally
-            {
-                if (File.Exists(tempPath))
-                {
-                    File.Delete(tempPath);
-                }
-            }
+
+            File.Delete(SystemColumnsFile);
+            File.Move(tempPath, SystemColumnsFile);
         }
 
-        public OperationStatus Insert(string tableName, List<string> values)
+        //Funcion para insertar valores en una tabla
+        public OperationStatus Insert(string TableName, List<string> Values)
         {
-            if (string.IsNullOrEmpty(CurrentDatabaseName))
+            if (string.IsNullOrEmpty(CurrentName))
             {
-                Console.WriteLine("La base no existe.");
+                Console.WriteLine("No se ha establecido una base de datos.");
                 return OperationStatus.Error;
             }
 
-            // Verifica que la tabla exista
-            if (!GetTables(CurrentDatabaseName).Contains(tableName))
+
+
+            List<string> tables = GetTables(CurrentName);
+            if (!tables.Contains(TableName))
             {
-                Console.WriteLine($"La tabla solicitada no existe en la base especificada'.");
+                Console.WriteLine("La tabla solicitada no existe en la base actual'.");
                 return OperationStatus.Error;
             }
 
-            // Obtiene las columnas de la tabla
-            List<Column> columns = GetColumns(CurrentDatabaseName, tableName);
 
-            // Valida el número de valores
-            if (values.Count != columns.Count)
+            List<Column> columns = GetColumns(CurrentName, TableName);
+
+            if (Values.Count != columns.Count)
             {
-                Console.WriteLine("No existen coincidencias.");
+                Console.WriteLine("El número de valores proporcionados no coincide con el número de columnas.");
                 return OperationStatus.Error;
             }
 
-            
-            var converted = new List<object>();
-            for (int i = 0; i < values.Count; i++)
+
+            var convertedValues = new List<object>();
+            for (int i = 0; i < Values.Count; i++)
             {
-                string valueStr = values[i];
+                string valueStr = Values[i];
                 Column column = columns[i];
+                object convertedValue;
 
                 try
                 {
-                    var convertedValue = Convert(valueStr, column.DataType, column.MaxSize);
-                    converted.Add(convertedValue);
-
-                    // Verifica duplicados en columnas indexadas
-                    if (GetName(CurrentDatabaseName, tableName, column.Name) != null)
-                    {
-                        var columnData = GetColumn(CurrentDatabaseName, tableName, column.Name);
-                        if (columnData.Contains(convertedValue))
-                        {
-                            Console.WriteLine($"El valor ya existe en la columna.");
-                            return OperationStatus.Error;
-                        }
-                    }
+                    convertedValue = Convert(valueStr, column.DataType, column.MaxSize);
+                    convertedValues.Add(convertedValue);
                 }
                 catch (Exception ex)
                 {
                     Console.WriteLine($"Error al convertir el valor '{valueStr}' para la columna '{column.Name}': {ex.Message}");
                     return OperationStatus.Error;
                 }
+
+
+
+
+                string existingIndex = GetNameOfIndex(CurrentName, TableName, column.Name);
+                if (existingIndex != null)
+                {
+
+                    List<object> columnData = GetData(CurrentName, TableName, column.Name);
+
+
+                    if (columnData.Contains(convertedValue))
+                    {
+                        Console.WriteLine($"El valor '{convertedValue}' ya existe en la columna '{column.Name}'. No es posible insertar duplicados.");
+                        return OperationStatus.Error; // Retornar error si el valor ya existe en la columna
+                    }
+                }
             }
 
-            string tablePath = Path.Combine(CurrentDatabasePath, $"{tableName}.table");
+
+            string tablePath = Path.Combine(CurrentPath, $"{TableName}.table");
 
             try
             {
                 using (FileStream fs = new FileStream(tablePath, FileMode.Append, FileAccess.Write))
                 using (BinaryWriter writer = new BinaryWriter(fs))
                 {
-                    foreach (var value in converted)
+                    foreach (var value in convertedValues)
                     {
-                        
                         Write(writer, value);
                     }
                 }
 
-                Console.WriteLine("La inserción fue exitosa.");
+                Console.WriteLine("Inserción exitosa.");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error al insertar los valores en la tabla '{tableName}': {ex.Message}");
+                Console.WriteLine($"Error al insertar los valores en la tabla '{TableName}': {ex.Message}");
                 return OperationStatus.Error;
             }
 
-            // Regenera los índices si la inserción fue exitosa
+
             try
             {
-                var indexGenerator = new IndexGenerator();
+                string originalDBName = CurrentName;
+                string originalDBPath = CurrentPath;
+
+                Generator indexGenerator = new Generator();
                 indexGenerator.RegenerateIndexes();
+
+
+                this.CurrentName = originalDBName;
+                this.CurrentPath = originalDBPath;
+
+
             }
             catch (Exception ex)
             {
@@ -586,125 +485,123 @@ namespace StoreDataManager
             return OperationStatus.Success;
         }
 
-        //Funcion para la creacion y manejo de indices
-
-        public OperationStatus CreateIndex(string indexName, string tableName, string columnName, string indexType)
+        // Función para crear los indices
+        public OperationStatus CreateIndex(string IndexName, string TableName, string ColumnName, string TypeOfIndex)
         {
-            
-            if (string.IsNullOrEmpty(CurrentDatabaseName))
-            {
-                Console.WriteLine("No se ha creado una base .");
-                return OperationStatus.Error;
-            }
 
-           
-            var tables = GetTables(CurrentDatabaseName);
-            if (!tables.Contains(tableName, StringComparer.OrdinalIgnoreCase))
-            {
-                Console.WriteLine($"La tabla solicitada no existe en la base especificada.");
-                return OperationStatus.Error;
-            }
-
-            
-            if (!indexType.Equals("BST", StringComparison.OrdinalIgnoreCase) &&
-                !indexType.Equals("BTREE", StringComparison.OrdinalIgnoreCase))
-            {
-                Console.WriteLine($"El tipo solicitado no es válido. Los comandos permitidos son 'BST' o 'BTREE'.");
-                return OperationStatus.Error;
-            }
-
-            
-            var allColumns = GetColumns(CurrentDatabaseName, tableName);
-
-            
-            var column = allColumns.FirstOrDefault(c => c.Name.Equals(columnName, StringComparison.OrdinalIgnoreCase));
-            if (column == null)
-            {
-                Console.WriteLine($"La columna '{columnName}' no existe en la tabla '{tableName}'.");
-                return OperationStatus.Error;
-            }
-
-            
-            var existingIndex = GetIndex(CurrentDatabaseName, tableName, columnName);
-            if (existingIndex != null)
-            {
-                Console.WriteLine($"Ya existe un índice asociado a la columna '{columnName}' en la tabla '{tableName}'. Índice existente: {existingIndex}");
-                return OperationStatus.Error;
-            }
-
-            // Obtener los datos de la columna
-            var columnData = GetColumn(CurrentDatabaseName, tableName, columnName);
-
-            // Verificar si hay datos duplicados
-            if (columnData.Count != columnData.Distinct().Count())
-            {
-                Console.WriteLine($"La columna '{columnName}' contiene datos duplicados. No se puede crear el índice.");
-                return OperationStatus.Error; // Retornar error si se encuentran datos duplicados
-            }
-
-            // Si no hay duplicados, proceder a crear el índice
-            using (var stream = File.Open(SystemIndexesFile, FileMode.OpenOrCreate, FileAccess.Write))
-            {
-                stream.Seek(0, SeekOrigin.End); // Mover el puntero al final para agregar nuevo índice
-
-                using (var writer = new BinaryWriter(stream))
-                {
-                    writer.Write(CurrentDatabaseName);
-                    writer.Write(tableName);
-                    writer.Write(indexName);
-                    writer.Write(columnName);
-                    writer.Write(indexType);
-                }
-            }
-
-            Console.WriteLine($"Índice '{indexName}' creado exitosamente para la columna '{columnName}' en la tabla '{tableName}'.");
-
-            return OperationStatus.Success;
-        }
-
-        //REVISAR A PARTIR DE AQUI
-        //Función para seleccionar datos
-
-        public OperationStatus Select(string tableName, List<string> columnsToSelect, string whereClause, string orderByColumn, string orderByDirection, out object? data)
-        {
-            data = null;
-            string mode = "DEFAULT";
-
-            
-            if (string.IsNullOrEmpty(CurrentDatabaseName))
+            if (string.IsNullOrEmpty(CurrentName))
             {
                 Console.WriteLine("No se ha establecido una base de datos.");
                 return OperationStatus.Error;
             }
 
-            
-            List<string> tables = GetTables(CurrentDatabaseName);
-            if (!tables.Contains(tableName))
+
+            List<string> tables = GetTables(CurrentName);
+            if (!tables.Contains(TableName))
             {
-                Console.WriteLine($"La tabla '{tableName}' no existe en la base de datos '{CurrentDatabaseName}'.");
+                Console.WriteLine($"La tabla '{TableName}' no existe en la base de datos '{CurrentName}'.");
                 return OperationStatus.Error;
             }
 
-            
-            List<Column> allColumns = GetColumns(CurrentDatabaseName, tableName);
 
-            
-            List<Column> selectedColumns;
-            if (columnsToSelect == null || columnsToSelect.Count == 0)
+            if (!TypeOfIndex.Equals("BST", StringComparison.OrdinalIgnoreCase) &&
+                !TypeOfIndex.Equals("BTREE", StringComparison.OrdinalIgnoreCase))
             {
-                // Seleccionar todas las columnas
+                Console.WriteLine($"El tipo de insice solicitado no es valido, unicamente se soportan indices de tipo 'BST' o 'BTREE'.");
+                return OperationStatus.Error;
+            }
+
+
+            List<Column> allColumns = GetColumns(CurrentName, TableName);
+
+
+            var column = allColumns.FirstOrDefault(c => c.Name.Equals(ColumnName, StringComparison.OrdinalIgnoreCase));
+            if (column == null)
+            {
+                Console.WriteLine("La columna especificada no existe en la tabla.");
+                return OperationStatus.Error;
+            }
+
+
+            string existingIndex = GetNameOfIndex(CurrentName, TableName, ColumnName);
+            if (existingIndex != null)
+            {
+                Console.WriteLine($"Ya existe un índice asociado a la columna actual.\n  Nombre del índice: {existingIndex}");
+                return OperationStatus.Error;
+            }
+
+
+            List<object> columnData = GetData(CurrentName, TableName, ColumnName);
+
+
+            if (columnData.Count != columnData.Distinct().Count())
+            {
+                Console.WriteLine($"Existen datos duplicados en la columna, es imposible crear el indice");
+                return OperationStatus.Error;
+            }
+
+
+            using (FileStream stream = File.Open(SystemIndexesFile, FileMode.OpenOrCreate, FileAccess.Write))
+            {
+                stream.Seek(0, SeekOrigin.End);
+
+                using (BinaryWriter writer = new(stream))
+                {
+                    writer.Write(CurrentName);
+                    writer.Write(TableName);
+                    writer.Write(IndexName);
+                    writer.Write(ColumnName);
+                    writer.Write(TypeOfIndex);
+                }
+            }
+
+            Console.WriteLine("Creación del índice exitosa.");
+
+            return OperationStatus.Success;
+        }
+
+
+        public OperationStatus Select(string TableName, List<string> ToSelect, string Where, string ColumnOrder, string DirectionOrder, out object? Data)
+
+        {
+
+            Data = null;
+            string mode = "DEFAULT";
+
+            if (string.IsNullOrEmpty(CurrentName))
+            {
+                Console.WriteLine("No existe una base de datos establecida");
+                return OperationStatus.Error;
+            }
+
+
+            List<string> tables = GetTables(CurrentName);
+            if (!tables.Contains(TableName))
+            {
+                Console.WriteLine("La tabla especificada no existe en la base actual");
+                return OperationStatus.Error;
+            }
+
+
+            List<Column> allColumns = GetColumns(CurrentName, TableName);
+
+
+            List<Column> selectedColumns;
+            if (ToSelect == null)
+            {
+
                 selectedColumns = allColumns;
             }
             else
             {
-                
+
                 selectedColumns = new List<Column>();
-                foreach (var colName in columnsToSelect)
+                foreach (var colName in ToSelect)
                 {
                     var col = allColumns.FirstOrDefault(c => c.Name.Equals(colName, StringComparison.OrdinalIgnoreCase));
                     if (col == null)
                     {
-                        Console.WriteLine($"La columna '{colName}' no existe en la tabla '{tableName}'.");
+                        Console.WriteLine("La columna especificada no existe en la tabla");
                         return OperationStatus.Error;
                     }
                     selectedColumns.Add(col);
@@ -713,63 +610,54 @@ namespace StoreDataManager
 
             var records = new List<Dictionary<string, object>>();
 
-           
-            if (IndexedDatabases.Contains(CurrentDatabaseName) && IndexedTables.Contains(tableName))
+            if (IndexedDatabases.Contains(CurrentName) && IndexedTables.Contains(TableName))
             {
                 foreach (var col in selectedColumns)
                 {
-                    string? indexName = GetIndex(CurrentDatabaseName, tableName, col.Name);
+                    string? indexName = GetAssociated(CurrentName, TableName, col.Name);
                     if (indexName != null)
                     {
-                        records = GetRecords(indexName);
-                        Console.WriteLine("USANDO ÍNDICES EN MEMORIA PARA ESTE REQUEST");
-                        break; // Utiliza solo el primer índice encontrado
+                        records = GetIndexRecord(indexName);
+
+                        break;
                     }
                 }
             }
 
+
             if (records == null || records.Count == 0)
+
             {
-                Console.WriteLine("No se encontraron índices asociados. Leyendo toda la tabla.");
-                records = GetRecords(tableName, allColumns);
+                Console.WriteLine("No se encontraron indices");
+                records = GetTableRecords(TableName, allColumns);
             }
+
 
             if (records == null)
             {
-                Console.WriteLine("No se pudieron leer los registros de la tabla.");
+                Console.WriteLine("No se pudo leer la tabla.");
                 return OperationStatus.Error;
             }
 
-            // Aplicar cláusula WHERE si es necesario
-            if (!string.IsNullOrEmpty(whereClause))
+            if (!string.IsNullOrEmpty(Where))
             {
-                records = FilteredByWhere(records, whereClause, tableName, allColumns, mode, null, null);
+                records = FilteredByWhere(records, Where, TableName, allColumns, mode, null, null);
                 if (records == null)
                 {
-                    Console.WriteLine("Error al aplicar la cláusula WHERE.");
                     return OperationStatus.Error;
                 }
             }
 
-            // Ordenar los registros si hay cláusula ORDER BY
-            if (!string.IsNullOrEmpty(orderByColumn))
-            {
-                var orderColumn = allColumns.FirstOrDefault(c => c.Name.Equals(orderByColumn, StringComparison.OrdinalIgnoreCase));
-                if (orderColumn == null)
-                {
-                    Console.WriteLine($"La columna '{orderByColumn}' no existe en la tabla '{tableName}'.");
-                    return OperationStatus.Error;
-                }
 
-                records = FilteredByOrder(records, orderByColumn, orderByDirection, tableName, allColumns);
+            if (!string.IsNullOrEmpty(ColumnOrder))
+            {
+                records = FilteredByOrder(records, ColumnOrder, DirectionOrder, TableName, allColumns);
                 if (records == null)
                 {
-                    Console.WriteLine("Error al aplicar el ordenamiento.");
                     return OperationStatus.Error;
                 }
             }
 
-            // Filtrar los registros seleccionados
             var filteredRecords = records.Select(record =>
             {
                 var filteredRecord = new Dictionary<string, object>();
@@ -780,80 +668,79 @@ namespace StoreDataManager
                 return filteredRecord;
             }).ToList();
 
-            // Asignar los datos al parámetro de salida
-            data = new
+
+            Data = new
             {
                 Columns = selectedColumns.Select(c => c.Name).ToList(),
                 Rows = filteredRecords
             };
 
-            // Mostrar los registros en formato de tabla
+
             PrintRecords(selectedColumns, records);
 
             return OperationStatus.Success;
         }
 
-        // Función para actualizar datos
-        public OperationStatus Update(string tableName, string columnName, string newValue, string whereClause)
+        //Función para actualizar datos de una tabla
+        public OperationStatus Update(string TableName, string ColumnName, string InsertedValue, string Where)
         {
-            // Verificar que la base de datos está establecida
-            if (string.IsNullOrEmpty(CurrentDatabaseName))
+
+            if (string.IsNullOrEmpty(CurrentName))
             {
-                Console.WriteLine("No se ha establecido una base de datos.");
+                Console.WriteLine("No existe una base de datos establecida");
                 return OperationStatus.Error;
             }
 
-            // Verificar que la tabla existe
-            List<string> tables = GetTables(CurrentDatabaseName);
-            if (!tables.Contains(tableName))
+
+            List<string> tables = GetTables(CurrentName);
+            if (!tables.Contains(TableName))
             {
-                Console.WriteLine($"La tabla '{tableName}' no existe en la base de datos '{CurrentDatabaseName}'.");
+                Console.WriteLine("La tabla especificada no existe en la base actual");
                 return OperationStatus.Error;
             }
 
-            // Obtener las columnas de la tabla
-            List<Column> allColumns = GetColumns(CurrentDatabaseName, tableName);
-            List<Dictionary<string, object>> records = GetRecords(tableName, allColumns);
+
+            List<Column> allColumns = GetColumns(CurrentName, TableName);
+            List<Dictionary<string, object>> records = GetTableRecords(TableName, allColumns);
             string mode = "UPDATE";
             object convertedValue;
 
             if (records == null)
             {
-                Console.WriteLine("No se pudieron leer los registros de la tabla.");
+                Console.WriteLine("No se pudo leer la tabla");
                 return OperationStatus.Error;
             }
 
             // Validar que la columna a actualizar existe
-            var targetColumn = allColumns.FirstOrDefault(c => c.Name.Equals(columnName, StringComparison.OrdinalIgnoreCase));
+            var targetColumn = allColumns.FirstOrDefault(c => c.Name.Equals(ColumnName, StringComparison.OrdinalIgnoreCase));
             if (targetColumn == null)
             {
-                Console.WriteLine($"La columna '{columnName}' no existe en la tabla '{tableName}'.");
+                Console.WriteLine($"La columna especificada no existe en la tabla");
                 return OperationStatus.Error;
             }
 
             try
             {
-                convertedValue = Convert(newValue, targetColumn.DataType, targetColumn.MaxSize);
+                convertedValue = Convert(InsertedValue, targetColumn.DataType, targetColumn.MaxSize);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error al convertir el valor '{newValue}' para la columna '{columnName}': {ex.Message}");
+                Console.WriteLine($"Error al convertir el valor '{InsertedValue}' para la columna '{ColumnName}': {ex.Message}");
                 return OperationStatus.Error;
             }
 
-            // Leer los registros de la tabla
-            string tablePath = Path.Combine(CurrentDatabasePath, $"{tableName}.table");
+
+            string tablePath = Path.Combine(CurrentPath, $"{TableName}.table");
 
             if (!File.Exists(tablePath))
             {
-                Console.WriteLine($"El archivo de la tabla '{tableName}' no existe.");
+                Console.WriteLine($"La tabla especificada no existe en la base actual");
                 return OperationStatus.Error;
             }
 
-            // Aplicar la cláusula WHERE si existe
-            if (!string.IsNullOrEmpty(whereClause))
+            if (!string.IsNullOrEmpty(Where))
             {
-                records = FilteredByWhere(records, whereClause, tableName, allColumns, mode, columnName, convertedValue);
+                records = FilteredByWhere(records, Where, TableName, allColumns, mode, ColumnName, convertedValue);
                 if (records == null)
                 {
                     return OperationStatus.Error;
@@ -861,313 +748,363 @@ namespace StoreDataManager
             }
             else
             {
-                // Si no hay WHERE, actualizamos todos los registros
                 foreach (var record in records)
                 {
-                    record[columnName] = convertedValue;
+                    record[ColumnName] = convertedValue;
                 }
             }
 
-            try
+            using (FileStream fs = new FileStream(tablePath, FileMode.Create, FileAccess.Write))
+            using (BinaryWriter writer = new BinaryWriter(fs))
             {
-                using (FileStream fs = new FileStream(tablePath, FileMode.Create, FileAccess.Write))
-                using (BinaryWriter writer = new BinaryWriter(fs))
+                foreach (var record in records)
                 {
-                    foreach (var record in records)
+                    foreach (var column in allColumns)
                     {
-                        foreach (var column in allColumns)
-                        {
-                            object value = record[column.Name];
-                            Write(writer, value);
-                        }
+                        object value = record[column.Name];
+                        Write(writer, value);
                     }
                 }
-
-                Console.WriteLine("Valores actualizados correctamente.");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error al escribir en la tabla: {ex.Message}");
-                return OperationStatus.Error;
             }
 
-            // Mantener el estado de la base de datos después de actualizar índices
-            string SettedDBNAME = CurrentDatabaseName;
-            string SettedDBPATH = CurrentDatabasePath;
+            string SettedDBNAME = CurrentName;
+            string SettedDBPATH = CurrentPath;
 
-            // Regenerar los índices
-            IndexGenerator indexGenerator = new IndexGenerator();
+
+            Console.WriteLine("Actualización exitosa.");
+            Generator indexGenerator = new Generator();
+
+
             indexGenerator.RegenerateIndexes();
 
-            // Restaurar el estado de la base de datos
-            this.CurrentDatabaseName = SettedDBPATH;
-            this.CurrentDatabasePath = SettedDBNAME;
+            this.CurrentPath = SettedDBPATH;
+            this.CurrentName = SettedDBNAME;
 
             return OperationStatus.Success;
+
         }
 
-        //Función para eliminar datos
-
-        public OperationStatus Delete(string tableName, string whereClause)
+        //Función para eliminar datos de una tabla
+        public OperationStatus Delete(string TableName, string Where)
         {
+
             string mode = "DEFAULT";
 
-            // Verificar que la base de datos está establecida
-            if (string.IsNullOrEmpty(CurrentDatabaseName))
+
+
+            if (string.IsNullOrEmpty(CurrentName))
             {
-                Console.WriteLine("No se ha establecido una base de datos.");
+                Console.WriteLine("No existe una base de datos establecida");
                 return OperationStatus.Error;
             }
 
             // Verificar que la tabla existe
-            List<string> tables = GetTables(CurrentDatabaseName);
-            if (!tables.Contains(tableName))
+            List<string> tables = GetTables(CurrentName);
+            if (!tables.Contains(TableName))
             {
-                Console.WriteLine($"La tabla '{tableName}' no existe en la base de datos '{CurrentDatabaseName}'.");
+                Console.WriteLine($"La tabla especificada no existe en la base actual");
                 return OperationStatus.Error;
             }
 
             // Obtener las columnas de la tabla
-            List<Column> allColumns = GetColumns(CurrentDatabaseName, tableName);
-            List<Dictionary<string, object>> records = GetRecords(tableName, allColumns);
+            List<Column> allColumns = GetColumns(CurrentName, TableName);
+            List<Dictionary<string, object>> records = GetTableRecords(TableName, allColumns);
             List<Dictionary<string, object>> recordsToDelete = new List<Dictionary<string, object>>();
-
             if (records == null)
             {
-                Console.WriteLine("No se pudieron leer los registros de la tabla.");
+                Console.WriteLine("No se pudo la tabla");
                 return OperationStatus.Error;
             }
 
-            // Filtrar registros si hay cláusula WHERE
-            if (!string.IsNullOrEmpty(whereClause))
+            if (!string.IsNullOrEmpty(Where))
             {
-                recordsToDelete = FilteredByWhere(records, whereClause, tableName, allColumns, mode, null, null);
+                recordsToDelete = FilteredByWhere(records, Where, TableName, allColumns, mode, null, null);
                 if (records == null)
                 {
                     return OperationStatus.Error;
                 }
             }
 
-            // Eliminar registros seleccionados
             records = records.Except(recordsToDelete).ToList();
 
-            string tablePath = Path.Combine(CurrentDatabasePath, $"{tableName}.table");
+            string tablePath = Path.Combine(CurrentPath, $"{TableName}.table");
 
-            try
+            using (FileStream fs = new FileStream(tablePath, FileMode.Create, FileAccess.Write))
+            using (BinaryWriter writer = new BinaryWriter(fs))
             {
-                using (FileStream fs = new FileStream(tablePath, FileMode.Create, FileAccess.Write))
-                using (BinaryWriter writer = new BinaryWriter(fs))
+                foreach (var record in records)
                 {
-                    foreach (var record in records)
+                    foreach (var column in allColumns)
                     {
-                        foreach (var column in allColumns)
-                        {
-                            object value = record[column.Name];
-                            Write(writer, value);
-                        }
+                        object value = record[column.Name];
+                        Write(writer, value);
                     }
                 }
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error al escribir en la tabla: {ex.Message}");
-                return OperationStatus.Error;
-            }
 
-            // Mantener el estado de la base de datos tras la actualización de índices
-            string CurrentDBNAME = CurrentDatabaseName;
-            string CurrentDBPATH = CurrentDatabasePath;
+            string SettedDBNAME = CurrentName;
+            string SettedDBPATH = CurrentPath;
 
-            // Regenerar índices
-            IndexGenerator indexGenerator = new IndexGenerator();
+            Generator indexGenerator = new Generator();
             indexGenerator.RegenerateIndexes();
 
-            // Restaurar el estado de la base de datos
-            this.CurrentDatabasePath = CurrentDBPATH;
-            this.CurrentDatabaseName = CurrentDBNAME;
+            this.CurrentPath = SettedDBPATH;
+            this.CurrentName = SettedDBNAME;
 
-            Console.WriteLine("Registros eliminados correctamente.");
             return OperationStatus.Success;
         }
 
-        public List<object> GetColumn(string databaseName, string tableName, string columnName)
+
+        private object Convert(string ValueStr, DataType Type, int? Max)
         {
-            string originalDBName = CurrentDatabaseName;
-            string originalDBPath = CurrentDatabasePath;
-            var columnData = new List<object>();
-
-
-            if (string.IsNullOrEmpty(databaseName))
+            switch (Type)
             {
-                Console.WriteLine("El nombre de la base de datos no puede estar vacío.");
-                return columnData;
+                case DataType.INTEGER:
+                    if (int.TryParse(ValueStr, out int intValue))
+                    {
+                        return intValue;
+                    }
+                    else
+                    {
+                        throw new Exception("El valor no es un entero válido");
+                    }
+                case DataType.DOUBLE:
+                    if (double.TryParse(ValueStr, out double doubleValue))
+                    {
+                        return doubleValue;
+                    }
+                    else
+                    {
+                        throw new Exception("El valor no es un double válido");
+                    }
+                case DataType.VARCHAR:
+                    ValueStr = ValueStr.Trim('\'', '\"');
+                    if (ValueStr.Length > Max)
+                    {
+                        throw new Exception($"Se está excediendo tamaño máximo. Tamaño maximo es de: {Max}");
+                    }
+                    return ValueStr;
+                case DataType.DATETIME:
+                    ValueStr = ValueStr.Trim('\'', '\"');
+                    if (DateTime.TryParse(ValueStr, out DateTime dateTimeValue))
+                    {
+                        return dateTimeValue;
+                    }
+                    else
+                    {
+                        throw new Exception("El valor no es una fecha válida");
+                    }
+                default:
+                    throw new Exception("Tipo de dato no soportado");
+            }
+        }
+
+        private void Write(BinaryWriter Writer, object ValueToWrite)
+        {
+            if (ValueToWrite is int intValue)
+            {
+                Writer.Write(intValue);
+            }
+            else if (ValueToWrite is double doubleValue)
+            {
+                Writer.Write(doubleValue);
+            }
+            else if (ValueToWrite is string strValue)
+            {
+                Writer.Write(strValue);
+            }
+            else if (ValueToWrite is DateTime dateTimeValue)
+            {
+                Writer.Write(dateTimeValue.ToBinary()); // Almacenar como ticks
+            }
+            else
+            {
+                throw new Exception("Tipo de dato no soportado para escritura.");
+            }
+        }
+
+        public List<object> GetData(string BaseName, string TableName, string ColumnName)
+        {
+
+            string originalName = CurrentName;
+            string originalPath = CurrentPath;
+
+            var Data = new List<object>();
+
+            // Verificar que la base de datos existe
+            if (string.IsNullOrEmpty(BaseName))
+            {
+                Console.WriteLine("La base debe de tener un nombre");
+                return Data;
             }
 
 
-            List<string> tables = GetTables(databaseName);
-            if (!tables.Contains(tableName))
+            List<string> tables = GetTables(BaseName);
+            if (!tables.Contains(TableName))
             {
-                Console.WriteLine($"La tabla '{tableName}' no existe en la base de datos '{databaseName}'.");
-                return columnData;
+                Console.WriteLine("La tabla especificada no existe en la base actual");
+                return Data;
+            }
+
+            List<Column> Columns = GetColumns(BaseName, TableName);
+
+            var TargetColumn = Columns.FirstOrDefault(c => c.Name.Equals(ColumnName, StringComparison.OrdinalIgnoreCase));
+            if (TargetColumn == null)
+            {
+                Console.WriteLine("La columna especificada no existe en la tabla");
+                return Data;
+            }
+
+            string BasePath = $@"{DataPath}\{BaseName}";
+
+            if (Directory.Exists(BasePath))
+            {
+
+
+
+                this.CurrentPath = BasePath;
+                this.CurrentName = BaseName;
+
             }
 
 
-            List<Column> allColumns = GetColumns(databaseName, tableName);
+            string PathOfTable = Path.Combine(CurrentPath, $"{TableName}.table");
 
-
-            var targetColumn = allColumns.FirstOrDefault(c => c.Name.Equals(columnName, StringComparison.OrdinalIgnoreCase));
-            if (targetColumn == null)
+            if (!File.Exists(PathOfTable))
             {
-                Console.WriteLine($"La columna '{columnName}' no existe en la tabla '{tableName}'.");
-                return columnData;
+                Console.WriteLine("La tabla no existe");
+                return Data;
             }
 
-            string dataBasePath = $@"{Store.DataPath}\{databaseName}";
-
-            if (Directory.Exists(dataBasePath))
-            {
-                this.CurrentDatabasePath = dataBasePath;
-                this.CurrentDatabaseName = databaseName;
-            }
-
-
-            string tablePath = Path.Combine(CurrentDatabasePath, $"{tableName}.table");
-
-            if (!File.Exists(tablePath))
-            {
-                Console.WriteLine($"El archivo de la tabla '{tableName}' no existe.");
-                return columnData;
-            }
-
-            int columnIndex = allColumns.IndexOf(targetColumn);
-
-            using (FileStream fs = new FileStream(tablePath, FileMode.Open, FileAccess.Read))
+            using (FileStream fs = new FileStream(PathOfTable, FileMode.Open, FileAccess.Read))
             using (BinaryReader reader = new BinaryReader(fs))
             {
                 while (fs.Position < fs.Length)
                 {
-                    for (int i = 0; i < allColumns.Count; i++)
+                    var record = new Dictionary<string, object>();
+                    foreach (var column in Columns)
                     {
-                        object value = Read(reader, allColumns[i].DataType);
-
-
-                        if (i == columnIndex)
-                        {
-                            columnData.Add(value);
-                        }
+                        object value = Read(reader, column.DataType);
+                        record[column.Name] = value;
                     }
+                    // Agregar el valor de la columna deseada a la lista
+                    Data.Add(record[TargetColumn.Name]);
                 }
             }
 
+            this.CurrentPath = originalPath;
+            this.CurrentName = originalName;
 
-            this.CurrentDatabasePath = originalDBPath;
-            this.CurrentDatabaseName = originalDBName;
-
-            return columnData;
+            return Data;
         }
 
-
-        public DataType? GetDatatype(string baseName, string tableName, string columnName)
+        public DataType? GetType(string BaseName, string TableName, string ColumnName)
         {
 
-            if (string.IsNullOrEmpty(baseName))
+            if (string.IsNullOrEmpty(BaseName))
             {
-                Console.WriteLine("No es posible asignar un nombre en blanco.");
+                Console.WriteLine("La base debe de tener un nombre");
                 return null;
             }
 
 
-            List<string> tables = GetTables(baseName);
-            if (!tables.Contains(tableName))
+            List<string> tables = GetTables(BaseName);
+            if (!tables.Contains(TableName))
             {
-                Console.WriteLine($"'{tableName}' no existe '{baseName}'.");
+                Console.WriteLine("La tabla especificada no existe en la base actual");
                 return null;
             }
 
 
-            List<Column> allColumns = GetColumns(baseName, tableName);
+            List<Column> AllColumns = GetColumns(BaseName, TableName);
 
 
-            var targetColumn = allColumns.FirstOrDefault(c => c.Name.Equals(columnName, StringComparison.OrdinalIgnoreCase));
-            if (targetColumn == null)
+            var TargetColumn = AllColumns.FirstOrDefault(c => c.Name.Equals(ColumnName, StringComparison.OrdinalIgnoreCase));
+            if (TargetColumn == null)
             {
-                Console.WriteLine($"La columna '{columnName}' no existe en la tabla '{tableName}'.");
+                Console.WriteLine("La columna especificada no existe en la tabla");
                 return null;
             }
 
 
-            return targetColumn.DataType;
+            return TargetColumn.DataType;
         }
-
 
         public string GetIndexes()
         {
             return SystemIndexesFile;
         }
 
-
-        public string GetName(string baseName, string tableName, string columnName)
+        public string GetNameOfIndex(string BaseName, string TableName, string ColumnName)
         {
+
             if (!File.Exists(SystemIndexesFile))
             {
+
                 return null;
             }
 
             using (FileStream stream = File.Open(SystemIndexesFile, FileMode.Open, FileAccess.Read))
-            using (BinaryReader reader = new(stream))
             {
-                while (stream.Position < stream.Length)
+                using (BinaryReader reader = new(stream))
                 {
-                    string Base_Name = reader.ReadString();
-                    string Table_Name = reader.ReadString();
-                    string index_Name = reader.ReadString();
-                    string Column_Name = reader.ReadString();
-                    string Index_Type = reader.ReadString();
-
-
-                    if (Base_Name.Equals(baseName, StringComparison.OrdinalIgnoreCase) && Table_Name.Equals(tableName, StringComparison.OrdinalIgnoreCase) && Column_Name.Equals(columnName, StringComparison.OrdinalIgnoreCase))
+                    while (stream.Position < stream.Length)
                     {
-                        return index_Name;
+
+                        string baseName = reader.ReadString();
+                        string tableName = reader.ReadString();
+                        string indexName = reader.ReadString();
+                        string columnName = reader.ReadString();
+                        string TypeOfIndex = reader.ReadString();
+
+
+                        if (baseName.Equals(BaseName, StringComparison.OrdinalIgnoreCase) &&
+                            tableName.Equals(TableName, StringComparison.OrdinalIgnoreCase) &&
+                            columnName.Equals(ColumnName, StringComparison.OrdinalIgnoreCase))
+                        {
+
+                            return indexName;
+                        }
                     }
                 }
             }
 
+
             return null;
         }
 
-
-        public string GetIndex(string baseName, string tableName, string columnName)
+        public string GetAssociated(string BaseName, string TableName, string ColumnName)
         {
-            if (IndexesByColumns.TryGetValue(columnName, out string indexName))
+
+            if (IndexesByColumns.TryGetValue(ColumnName, out string indexName))
             {
-                Console.WriteLine($"Índice asociado encontrado: {indexName}");
+                Console.WriteLine("Se ha encontrado el índice");
                 return indexName;
             }
             else
             {
-                Console.WriteLine($"No se encontró un índice para la columna solicitada en {tableName}.");
+                Console.WriteLine("No se encontró un índice asociado para la columna especificada");
                 return null;
             }
         }
 
-
-        public List<Dictionary<string, object>> GetRecords(string indexName)
+        public List<Dictionary<string, object>> GetIndexRecord(string indexName)
         {
             if (IndexTrees.TryGetValue(indexName, out object tree))
             {
 
                 switch (tree)
                 {
-                    case BinarySearchTree<int> bstInt:
+                    case BST<int> bstInt:
                         return bstInt.GetAllRecords();
 
-                    case BinarySearchTree<string> bstString:
+                    case BST<string> bstString:
                         return bstString.GetAllRecords();
 
-                    case BinarySearchTree<double> bstDouble:
+                    case BST<double> bstDouble:
                         return bstDouble.GetAllRecords();
 
-                    case BinarySearchTree<DateTime> bstDateTime:
+                    case BST<DateTime> bstDateTime:
                         return bstDateTime.GetAllRecords();
 
                     case BTree<int> btreeInt:
@@ -1183,306 +1120,338 @@ namespace StoreDataManager
                         return btreeDateTime.GetAllRecords();
 
                     default:
-                        Console.WriteLine("Tipo no soportado.");
+                        Console.WriteLine("Tipo de árbol no soportado");
                         return null;
                 }
             }
             else
             {
-                Console.WriteLine("El índice no existe.");
+                Console.WriteLine("El índice especificado no existe");
                 return null;
             }
         }
 
-        public object Convert(string value, DataType Type, int? Size)
+        public List<Dictionary<string, object>> GetTableRecords(string TableName, List<Column> AllColumns)
+
+
         {
-            if (string.IsNullOrEmpty(value))
+            string tablePath = Path.Combine(CurrentPath, $"{TableName}.table");
+
+            if (!File.Exists(tablePath))
             {
-                throw new Exception("El valor .");
+                Console.WriteLine("La tabla no existe");
+                return new List<Dictionary<string, object>>();
             }
 
+            var records = new List<Dictionary<string, object>>();
+
+            using (FileStream fs = new FileStream(tablePath, FileMode.Open, FileAccess.Read))
+            using (BinaryReader reader = new BinaryReader(fs))
+            {
+                while (fs.Position < fs.Length)
+                {
+                    var record = new Dictionary<string, object>();
+                    foreach (var column in AllColumns)
+                    {
+                        object value = Read(reader, column.DataType);
+                        record[column.Name] = value;
+                    }
+                    records.Add(record);
+
+
+                    foreach (var key in record.Keys)
+                    {
+                        Console.WriteLine($"Columna: {key}, Valor: {record[key]}");
+                    }
+                }
+            }
+
+            return records;
+        }
+
+        public List<Dictionary<string, object>> GetTableData(string BaseName, string TableName, List<Column> AllColumns)
+
+
+        {
+            string DataBasePath = $@"{DataPath}\{BaseName}";
+
+            if (Directory.Exists(DataBasePath))
+            {
+
+                this.CurrentPath = DataBasePath;
+                this.CurrentName = BaseName;
+
+            }
+
+
+            string tablePath = Path.Combine(CurrentPath, $"{TableName}.table");
+
+            if (!File.Exists(tablePath))
+            {
+                Console.WriteLine($"La tabla no existe");
+                return new List<Dictionary<string, object>>();
+            }
+
+            var records = new List<Dictionary<string, object>>();
+
+            using (FileStream fs = new FileStream(tablePath, FileMode.Open, FileAccess.Read))
+            using (BinaryReader reader = new BinaryReader(fs))
+            {
+                while (fs.Position < fs.Length)
+                {
+                    var record = new Dictionary<string, object>();
+                    foreach (var column in AllColumns)
+                    {
+                        object value = Read(reader, column.DataType);
+                        record[column.Name] = value;
+                    }
+                    records.Add(record);
+
+
+                    foreach (var key in record.Keys)
+                    {
+                        //Console.WriteLine($"Columna: {key}, Valor: {record[key]}");
+                    }
+                }
+            }
+
+            this.CurrentPath = string.Empty;
+            this.CurrentName = string.Empty;
+
+            return records;
+        }
+
+        private List<Dictionary<string, object>> FilteredByWhere(List<Dictionary<string, object>> Records, string Where, string TableName, List<Column> AllColumns, string Mode, string? CurrentColumn, object? ValueToUpdate)
+        {
+
+            string WhereColumn = null;
+            string WhereOperator = null;
+            string WhereValue = null;
+
+            var whereMatch = Regex.Match(Where, @"(\w+)\s*(=|>|<|LIKE|NOT)\s*(.+)", RegexOptions.IgnoreCase);
+            if (!whereMatch.Success)
+            {
+                Console.WriteLine("Error de sintaxis");
+                return Records = null;
+            }
+
+            WhereColumn = whereMatch.Groups[1].Value;
+            WhereOperator = whereMatch.Groups[2].Value.ToUpper();
+            WhereValue = whereMatch.Groups[3].Value.Trim('\'', '\"');
+
+            // Validar la columna
+            var whereCol = AllColumns.FirstOrDefault(c => c.Name.Equals(WhereColumn, StringComparison.OrdinalIgnoreCase));
+            if (whereCol == null)
+            {
+                Console.WriteLine("La columna especificada no existe en la tabla");
+                return Records = null;
+            }
+
+            // Aplicar el filtro
+            if (Mode == "DEFAULT")
+            {
+                return Records = Records.Where(record => WhereCondition(record, WhereColumn, WhereOperator, WhereValue)).ToList();
+            }
+
+            else if (Mode == "UPDATE")
+            {
+
+
+                foreach (var record in Records)
+                {
+                    if (WhereCondition(record, WhereColumn, WhereOperator, WhereValue))
+                    {
+                        record[CurrentColumn] = ValueToUpdate;
+                    }
+                }
+
+                return Records;
+            }
+
+            else
+            {
+                return Records = null;
+            }
+
+        }
+
+        private List<Dictionary<string, object>> FilteredByOrder(List<Dictionary<string, object>> Records, string ColumnOrder, string DirectionOrder, string TableName, List<Column> AllColumns)
+        {
+            var orderByCol = AllColumns.FirstOrDefault(c => c.Name.Equals(ColumnOrder, StringComparison.OrdinalIgnoreCase));
+            if (orderByCol == null)
+            {
+                Console.WriteLine("La columna especificada no existe en la tabla");
+                return null;
+            }
+
+            bool descending = DirectionOrder.Equals("DESC", StringComparison.OrdinalIgnoreCase);
+
+            // Llamar a Quicksort
+            Sort(Records, 0, Records.Count - 1, orderByCol.Name, descending);
+
+            return Records;
+        }
+
+        private object Read(BinaryReader Reader, DataType Type)
+        {
             switch (Type)
             {
                 case DataType.INTEGER:
-                    if (int.TryParse(value, out int intValue))
-                    {
-                        return intValue;
-                    }
-                    else
-                    {
-                        throw new Exception("El valor no es válido.");
-                    }
-
+                    return Reader.ReadInt32();
                 case DataType.DOUBLE:
-                    if (double.TryParse(value, out double doubleValue))
-                    {
-                        return doubleValue;
-                    }
-                    else
-                    {
-                        throw new Exception("El valor no válido.");
-                    }
-
+                    return Reader.ReadDouble();
                 case DataType.VARCHAR:
-                    value = value.Trim('\'', '\"');
-                    if (Size.HasValue && value.Length > Size.Value)
-                    {
-                        throw new Exception($"Se está excediendo el tamaño maximo. El tamaño es de {Size}.");
-                    }
-                    return value;
-
+                    return Reader.ReadString();
                 case DataType.DATETIME:
-                    value = value.Trim('\'', '\"');
-                    if (DateTime.TryParse(value, out DateTime dateTimeValue))
-                    {
-                        return dateTimeValue;
-                    }
-                    else
-                    {
-                        throw new Exception("El valor no es válido.");
-                    }
-
+                    long ticks = Reader.ReadInt64();
+                    return DateTime.FromBinary(ticks);
                 default:
-                    throw new Exception("Tipo no soportado.");
+                    throw new Exception("Tipo de dato no soportado");
             }
         }
 
-        public void Write(BinaryWriter writer, object value)
+        private void PrintRecords(List<Column> SelectedColumns, List<Dictionary<string, object>> Records)
         {
-            if (value == null)
-            {
-                writer.Write(false);
-                return;
-            }
-            else
-            {
-                writer.Write(true);
-            }
 
-            if (value is int intValue)
-            {
-                writer.Write(intValue);
-            }
-            else if (value is double doubleValue)
-            {
-                writer.Write(doubleValue);
-            }
-            else if (value is string strValue)
-            {
-                writer.Write(strValue);
-            }
-            else if (value is DateTime dateTimeValue)
-            {
-                writer.Write(dateTimeValue.ToBinary());
-            }
-            else
-            {
-                throw new Exception("Tipo no soportado.");
-            }
-        }
+            var table = new List<Dictionary<string, object>>();
 
-        public List<Dictionary<string, object>> GetRecords(string tableName, List<Column> allColumns)
-        {
-            string tablePath = Path.Combine(CurrentDatabasePath, $"{tableName}.table");
-
-
-            if (!File.Exists(tablePath))
+            foreach (var record in Records)
             {
-                Console.WriteLine($"El archivo de la tabla '{tableName}' no existe.");
-                return new List<Dictionary<string, object>>();
-            }
-
-            var records = new List<Dictionary<string, object>>();
-
-            try
-            {
-                using (FileStream fs = new FileStream(tablePath, FileMode.Open, FileAccess.Read))
-                using (BinaryReader reader = new BinaryReader(fs))
+                var row = new Dictionary<string, object>();
+                foreach (var column in SelectedColumns)
                 {
-                    while (fs.Position < fs.Length)
-                    {
-                        var record = new Dictionary<string, object>();
-                        foreach (var column in allColumns)
-                        {
-                            object value = Read(reader, column.DataType);
-                            record[column.Name] = value;
-                        }
-                        records.Add(record);
+                    row[column.Name] = record[column.Name];
+                }
+                table.Add(row);
+            }
 
-                        // Depuración: Imprimir registro leído
-                        Console.WriteLine("Registro leído:");
-                        foreach (var key in record.Keys)
-                        {
-                            Console.WriteLine($"Columna: {key}, Valor: {record[key]}");
-                        }
+
+            var columnNames = SelectedColumns.Select(c => c.Name).ToList();
+
+
+            PrintTable(table, columnNames);
+        }
+
+        private void PrintTable(List<Dictionary<string, object>> Table, List<string> Columns)
+        {
+
+            Dictionary<string, int> ColumnWidth = new Dictionary<string, int>();
+
+
+            foreach (var col in Columns)
+            {
+                ColumnWidth[col] = col.Length;
+            }
+
+
+            foreach (var row in Table)
+            {
+                foreach (var col in Columns)
+                {
+                    string valueStr = row[col]?.ToString() ?? "NULL";
+                    if (valueStr.Length > ColumnWidth[col])
+                    {
+                        ColumnWidth[col] = valueStr.Length;
                     }
                 }
             }
-            catch (Exception ex)
+
+
+            foreach (var col in Columns)
             {
-                Console.WriteLine($"Error al leer los registros de la tabla '{tableName}': {ex.Message}");
-                return new List<Dictionary<string, object>>();
+                Console.Write($"| {col.PadRight(ColumnWidth[col])} ");
             }
+            Console.WriteLine("|");
 
-            return records;
-        }
 
-        public List<Dictionary<string, object>> GetData(string DataBaseName, string tableName, List<Column> allColumns)
-        {
-            string DataBasePath = $@"{Store.DataPath}\{DataBaseName}";
+            Console.WriteLine(new string('-', Columns.Sum(col => ColumnWidth[col] + 3) + 1));
 
-            if (!Directory.Exists(DataBasePath))
+
+            foreach (var row in Table)
             {
-                Console.WriteLine($"La base de datos '{DataBaseName}' no existe.");
-                return new List<Dictionary<string, object>>();
-            }
-
-            this.CurrentDatabasePath = DataBasePath;
-            this.CurrentDatabaseName = DataBaseName;
-
-            string tablePath = Path.Combine(CurrentDatabasePath, $"{tableName}.table");
-
-            if (!File.Exists(tablePath))
-            {
-                Console.WriteLine($"El archivo de la tabla '{tableName}' no existe.");
-                return new List<Dictionary<string, object>>();
-            }
-
-            var records = new List<Dictionary<string, object>>();
-
-            try
-            {
-                using (FileStream fs = new FileStream(tablePath, FileMode.Open, FileAccess.Read))
-                using (BinaryReader reader = new BinaryReader(fs))
+                foreach (var col in Columns)
                 {
-                    while (fs.Position < fs.Length)
-                    {
-                        var record = new Dictionary<string, object>();
-                        foreach (var column in allColumns)
-                        {
-                            object value = Read(reader, column.DataType);
-                            record[column.Name] = value;
-                        }
-                        records.Add(record);
-                    }
+                    string valueStr = row[col]?.ToString() ?? "NULL";
+                    Console.Write($"| {valueStr.PadRight(ColumnWidth[col])} ");
                 }
+                Console.WriteLine("|");
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error al leer los registros de la tabla '{tableName}': {ex.Message}");
-                return new List<Dictionary<string, object>>();
-            }
-            finally
-            {
-                // Restablecer las propiedades de la base de datos después de la operación
-                this.CurrentDatabasePath = string.Empty;
-                this.CurrentDatabaseName = string.Empty;
-            }
-
-            return records;
         }
 
-        public List<Dictionary<string, object>> FilteredByWhere(List<Dictionary<string, object>> records, string whereClause, string tableName, List<Column> allColumns, string mode, string? settedColumn, object? updateValue)
+        private bool WhereCondition(Dictionary<string, object> Record, string ColumnName, string Operator, string Value)
         {
-            // Parsear y evaluar la cláusula WHERE
-            var whereMatch = Regex.Match(whereClause, @"(\w+)\s*(=|>|<|LIKE|NOT)\s*(.+)", RegexOptions.IgnoreCase);
-            if (!whereMatch.Success)
-            {
-                Console.WriteLine("Sintaxis de WHERE incorrecta.");
-                return null;
-            }
+            if (!Record.ContainsKey(ColumnName))
+                return false;
 
-            string whereColumn = whereMatch.Groups[1].Value;
-            string whereOperator = whereMatch.Groups[2].Value.ToUpper();
-            string whereValue = whereMatch.Groups[3].Value.Trim('\'', '\"');
+            var recordValue = Record[ColumnName];
 
-            // Validar la columna
-            var whereCol = allColumns.FirstOrDefault(c => c.Name.Equals(whereColumn, StringComparison.OrdinalIgnoreCase));
-            if (whereCol == null)
+            switch (Operator)
             {
-                Console.WriteLine($"La columna '{whereColumn}' no existe en la tabla '{tableName}'.");
-                return null;
+                case "=":
+                    return recordValue.ToString().Equals(Value, StringComparison.OrdinalIgnoreCase);
+                case ">":
+                    return Compare(recordValue, Value) > 0;
+                case "<":
+                    return Compare(recordValue, Value) < 0;
+                case "LIKE":
+                    return recordValue.ToString().Contains(Value, StringComparison.OrdinalIgnoreCase);
+                case "NOT":
+                    return !recordValue.ToString().Equals(Value, StringComparison.OrdinalIgnoreCase);
+                default:
+                    throw new Exception("Operador no soportado.");
             }
-
-            // Aplicar el filtro según el modo
-            if (mode == "DEFAULT")
-            {
-                return records.Where(record => WhereCondition(record, whereColumn, whereOperator, whereValue)).ToList();
-            }
-            else if (mode == "UPDATE" && settedColumn != null && updateValue != null)
-            {
-                foreach (var record in records)
-                {
-                    if (WhereCondition(record, whereColumn, whereOperator, whereValue))
-                    {
-                        record[settedColumn] = updateValue;
-                    }
-                }
-                return records;
-            }
-
-            Console.WriteLine("Modo desconocido o parámetros incorrectos.");
-            return null;
         }
 
-        public int CompareValues(object value1, object value2)
+        private int Compare(object Value_1, object Value_2)
         {
-            if (value1 == null && value2 == null)
+            if (Value_1 == null && Value_2 == null)
                 return 0;
-            if (value1 == null)
+            if (Value_1 == null)
                 return -1;
-            if (value2 == null)
+            if (Value_2 == null)
                 return 1;
 
-            switch (value1)
+            if (Value_1 is int int1 && Value_2 is int int2)
             {
-                case int int1 when value2 is int int2:
-                    return int1.CompareTo(int2);
-                case double double1 when value2 is double double2:
-                    return double1.CompareTo(double2);
-                case string str1 when value2 is string str2:
-                    return string.Compare(str1, str2, StringComparison.OrdinalIgnoreCase);
-                case DateTime date1 when value2 is DateTime date2:
-                    return date1.CompareTo(date2);
-                // Agregar más tipos aquí según sea necesario
-                default:
-                    throw new InvalidOperationException("Tipos de datos no comparables o incompatibles.");
+                return int1.CompareTo(int2);
+            }
+            else if (Value_1 is double double1 && Value_2 is double double2)
+            {
+                return double1.CompareTo(double2);
+            }
+            else if (Value_1 is string str1 && Value_2 is string str2)
+            {
+                return string.Compare(str1, str2, StringComparison.OrdinalIgnoreCase);
+            }
+            else if (Value_1 is DateTime date1 && Value_2 is DateTime date2)
+            {
+                return date1.CompareTo(date2);
+            }
+            else
+            {
+                throw new Exception("Tipos incompatibles.");
             }
         }
 
-        public void QuickSort(List<Dictionary<string, object>> records, int low, int high, string columnName, bool descending)
+        private void Sort(List<Dictionary<string, object>> Records, int Low, int High, string ColumnName, bool Desc)
         {
-            if (low < high)
+            if (Low < High)
             {
-                int pivotIndex = Partition(records, low, high, columnName, descending);
-                QuickSort(records, low, pivotIndex - 1, columnName, descending);
-                QuickSort(records, pivotIndex + 1, high, columnName, descending);
+                int pivotIndex = Partition(Records, Low, High, ColumnName, Desc);
+                Sort(Records, Low, pivotIndex - 1, ColumnName, Desc);
+                Sort(Records, pivotIndex + 1, High, ColumnName, Desc);
             }
         }
 
-        public int Partition(List<Dictionary<string, object>> records, int low, int high, string columnName, bool descending)
+        private int Partition(List<Dictionary<string, object>> records, int Low, int high, string ColumnName, bool Desc)
         {
-            // Verificar que la columna existe
-            if (!records.Any() || !records[0].ContainsKey(columnName))
+            var pivotValue = records[high][ColumnName];
+            int i = Low - 1;
+
+            for (int j = Low; j < high; j++)
             {
-                throw new ArgumentException($"La columna '{columnName}' no existe en los registros.");
-            }
-
-            var pivotValue = records[high][columnName];
-            int i = low - 1;
-
-            for (int j = low; j < high; j++)
-            {
-                // Manejo de valores nulos en comparación
-                if (records[j][columnName] == null || pivotValue == null)
-                {
-                    // Puedes definir cómo quieres tratar los nulos aquí
-                    continue; // O lanzar una excepción, según tu lógica
-                }
-
-                int comparisonResult = CompareValues(records[j][columnName], pivotValue);
-
-                if (descending)
+                int comparisonResult = Compare(records[j][ColumnName], pivotValue);
+                if (Desc)
                 {
                     if (comparisonResult > 0)
                     {
@@ -1504,148 +1473,11 @@ namespace StoreDataManager
             return i + 1;
         }
 
-        public void Swap(List<Dictionary<string, object>> records, int index1, int index2)
+        private void Swap(List<Dictionary<string, object>> Records, int Index_1, int Index_2)
         {
-            var temp = records[index1];
-            records[index1] = records[index2];
-            records[index2] = temp;
+            var temp = Records[Index_1];
+            Records[Index_1] = Records[Index_2];
+            Records[Index_2] = temp;
         }
-
-        public List<Dictionary<string, object>> FilteredByOrder(List<Dictionary<string, object>> records, string orderByColumn, string orderByDirection, string tableName, List<Column> allColumns)
-        {
-            // Verificar que la lista de registros no esté vacía
-            if (records == null || records.Count == 0)
-            {
-                Console.WriteLine("No hay registros para ordenar.");
-                return records; // O lanzar una excepción
-            }
-
-            // Validar que la columna existe
-            var orderByCol = allColumns.FirstOrDefault(c => c.Name.Equals(orderByColumn, StringComparison.OrdinalIgnoreCase));
-            if (orderByCol == null)
-            {
-                throw new ArgumentException($"La columna '{orderByColumn}' no existe en la tabla '{tableName}'.");
-            }
-
-            // Determinar la dirección de orden
-            bool descending = orderByDirection.Equals("DESC", StringComparison.OrdinalIgnoreCase);
-
-            // Llamar al método QuickSort
-            QuickSort(records, 0, records.Count - 1, orderByCol.Name, descending);
-
-            return records;
-        }
-
-        public object Read(BinaryReader reader, DataType dataType)
-        {
-            switch (dataType)
-            {
-                case DataType.INTEGER:
-                    return reader.ReadInt32();
-                case DataType.DOUBLE:
-                    return reader.ReadDouble();
-                case DataType.VARCHAR:
-                    return reader.ReadString();
-                case DataType.DATETIME:
-                    long ticks = reader.ReadInt64();
-                    return DateTime.FromBinary(ticks);
-                default:
-                    throw new Exception("Tipo de dato no soportado para lectura.");
-            }
-        }
-
-        public void PrintRecords(List<Column> selected, List<Dictionary<string, object>> records)
-        {
-
-            var table = new List<Dictionary<string, object>>();
-
-            foreach (var record in records)
-            {
-                var row = new Dictionary<string, object>();
-                foreach (var column in selected)
-                {
-                    row[column.Name] = record[column.Name];
-                }
-                table.Add(row);
-            }
-
-
-            var Names = selected.Select(c => c.Name).ToList();
-
-
-            PrintTable(table, Names);
-        }
-
-        public void PrintTable(List<Dictionary<string, object>> table, List<string> columns)
-        {
-
-            Dictionary<string, int> Widths = new Dictionary<string, int>();
-
-
-            foreach (var col in columns)
-            {
-                Widths[col] = col.Length;
-            }
-
-
-            foreach (var row in table)
-            {
-                foreach (var col in columns)
-                {
-                    string valueStr = row[col]?.ToString() ?? "NULL";
-                    if (valueStr.Length > Widths[col])
-                    {
-                        Widths[col] = valueStr.Length;
-                    }
-                }
-            }
-
-
-            foreach (var col in columns)
-            {
-                Console.Write($"| {col.PadRight(Widths[col])} ");
-            }
-            Console.WriteLine("|");
-
-
-            Console.WriteLine(new string('-', columns.Sum(col => Widths[col] + 3) + 1));
-
-
-            foreach (var row in table)
-            {
-                foreach (var col in columns)
-                {
-                    string valueStr = row[col]?.ToString() ?? "NULL";
-                    Console.Write($"| {valueStr.PadRight(Widths[col])} ");
-                }
-                Console.WriteLine("|");
-            }
-        }
-
-        public bool WhereCondition(Dictionary<string, object> record, string column, string operatorStr, string valueStr)
-        {
-            if (!record.ContainsKey(column))
-                return false;
-
-            var recordValue = record[column];
-
-            switch (operatorStr)
-            {
-                case "=":
-                    return recordValue.ToString().Equals(valueStr, StringComparison.OrdinalIgnoreCase);
-                case ">":
-                    return CompareValues(recordValue, valueStr) > 0;
-                case "<":
-                    return CompareValues(recordValue, valueStr) < 0;
-                case "LIKE":
-                    return recordValue.ToString().Contains(valueStr, StringComparison.OrdinalIgnoreCase);
-                case "NOT":
-                    return !recordValue.ToString().Equals(valueStr, StringComparison.OrdinalIgnoreCase);
-                default:
-                    throw new Exception("El operador ingresado no es valido.");
-            }
-        }
-
-
     }
 }

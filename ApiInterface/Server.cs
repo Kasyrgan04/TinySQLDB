@@ -23,7 +23,7 @@ namespace ApiInterface
             listener.Listen(supportedParallelConnections);
             Console.WriteLine($"Server ready at {serverEndPoint.ToString()}");
 
-            var indexGenerator = new IndexGenerator();
+            var indexGenerator = new Generator();
             indexGenerator.LoadIndexesAndGenerateTrees();
             Console.WriteLine("Índices cargados y árboles generados en memoria.");
 

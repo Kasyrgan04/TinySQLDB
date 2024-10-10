@@ -12,7 +12,7 @@ namespace QueryProcessor.Operations
     {
         internal OperationStatus Execute(string TableToDrop)
         {
-            return Store.GetInstance().DropTable(TableToDrop);
+            return Store.GetInstance().Drop(TableToDrop);
         }
 
     }

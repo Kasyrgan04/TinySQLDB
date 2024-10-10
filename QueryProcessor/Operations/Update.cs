@@ -1,4 +1,5 @@
-﻿using StoreDataManager;
+﻿using Entities;
+using StoreDataManager;
 using System.Text.RegularExpressions;
 
 namespace QueryProcessor.Operations

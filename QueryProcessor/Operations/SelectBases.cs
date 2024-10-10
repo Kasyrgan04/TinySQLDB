@@ -8,7 +8,7 @@ using StoreDataManager;
 
 namespace QueryProcessor.Operations
 {
-    internal class SelectSystemDataBases
+    internal class SelectBases
     {
         public OperationStatus Execute()
         {

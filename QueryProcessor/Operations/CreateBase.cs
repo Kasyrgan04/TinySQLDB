@@ -3,7 +3,7 @@ using StoreDataManager;
 
 namespace QueryProcessor.Operations
 {
-    internal class CreateDataBase
+    internal class CreateBase
     {
         internal OperationStatus Execute(string DataBaseName)
         {

@@ -15,7 +15,7 @@ namespace QueryProcessor
             if (sentence.StartsWith("CREATE DATABASE"))
             {
                 string DataBaseName = sentence.Substring("CREATE DATABASE".Length).Trim();
-                return new CreateDataBase().Execute(DataBaseName);
+                return new CreateBase().Execute(DataBaseName);
             }
             if (sentence.StartsWith("SET DATABASE"))
             {
@@ -52,15 +52,15 @@ namespace QueryProcessor
                 // Verificar si la consulta es sobre el System Catalog
                 if (sentence.Contains("FROM SystemDatabases", StringComparison.OrdinalIgnoreCase))
                 {
-                    return new SelectSystemDataBases().Execute();
+                    return new SelectBases().Execute();
                 }
                 else if (sentence.Contains("FROM SystemTables", StringComparison.OrdinalIgnoreCase))
                 {
-                    return new SelectSystemTables().Execute();
+                    return new SelectTables().Execute();
                 }
                 else if (sentence.Contains("FROM SystemColumns", StringComparison.OrdinalIgnoreCase))
                 {
-                    return new SelectSystemColumns().Execute();
+                    return new SelectColumns().Execute();
                 }
                 else
                 {

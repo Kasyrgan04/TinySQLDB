@@ -20,11 +20,11 @@ namespace ApiInterface.Indexes
         }
     }
 
-    public class BinarySearchTree<T> where T : IComparable<T>
+    public class BST<T> where T : IComparable<T>
     {
         TreeNode<T> root;
 
-        public BinarySearchTree()
+        public BST()
         {
             root = null;
         }

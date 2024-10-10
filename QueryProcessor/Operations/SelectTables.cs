@@ -8,7 +8,7 @@ using Entities;
 
 namespace QueryProcessor.Operations
 {
-    internal class SelectSystemTables
+    internal class SelectTables
     {
         public OperationStatus Execute()
         {
